@@ -9,8 +9,10 @@ function Lesson({ lesson, language, onComplete }) {
   const [isListening, setIsListening] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [audioCache, setAudioCache] = useState({});
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const recognition = useRef(null);
-  const speechSynthesisRef = useRef(window.speechSynthesis);
+  const audioRef = useRef(new Audio());
 
   useEffect(() => {
     if ('webkitSpeechRecognition' in window) {
@@ -37,6 +39,7 @@ function Lesson({ lesson, language, onComplete }) {
         }
         const data = await response.json();
         setContent(data);
+        await preGenerateAudio(data.exercises);
       } catch (err) {
         setError(`Failed to generate lesson content: ${err.message}`);
         console.error('Full error:', err);
@@ -48,30 +51,54 @@ function Lesson({ lesson, language, onComplete }) {
     fetchLessonContent();
   }, [lesson, language]);
 
-  const getVoiceForLanguage = (lang) => {
-    const voices = speechSynthesisRef.current.getVoices();
-    const languageVoices = {
-      'en-US': 'Google US English',
-      'en-GB': 'Google UK English Male',
-      'fr-FR': 'Google français',
-      'de-DE': 'Google Deutsch',
-      'it-IT': 'Google italiano',
-      'es-ES': 'Google español',
-      'ja-JP': 'Google 日本語',
-      'ko-KR': 'Google 한국의',
-      'zh-CN': 'Google 普通话（中国大陆）',
-    };
-
-    const preferredVoice = voices.find(voice => voice.name === languageVoices[lang]);
-    return preferredVoice || voices.find(voice => voice.lang.startsWith(lang)) || voices[0];
+  const preGenerateAudio = async (exercises) => {
+    setIsGeneratingAudio(true);
+    const newAudioCache = { ...audioCache };
+    for (const exercise of exercises) {
+      if (exercise.type === 'listen_and_repeat' && !newAudioCache[exercise.phrase]) {
+        try {
+          const audioBlob = await generateAudio(exercise.phrase);
+          newAudioCache[exercise.phrase] = URL.createObjectURL(audioBlob);
+        } catch (error) {
+          console.error('Error pre-generating audio:', error);
+        }
+      }
+    }
+    setAudioCache(newAudioCache);
+    setIsGeneratingAudio(false);
   };
 
-  const speakPhrase = (phrase) => {
-    const utterance = new SpeechSynthesisUtterance(phrase);
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.voice = getVoiceForLanguage(language);
-    speechSynthesisRef.current.speak(utterance);
+  const generateAudio = async (text) => {
+    const response = await fetch('/api/generate-audio', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate audio');
+    }
+
+    return await response.blob();
+  };
+
+  const speakPhrase = async (phrase) => {
+    if (audioCache[phrase]) {
+      audioRef.current.src = audioCache[phrase];
+      await audioRef.current.play();
+    } else {
+      try {
+        const audioBlob = await generateAudio(phrase);
+        const audioUrl = URL.createObjectURL(audioBlob);
+        setAudioCache({ ...audioCache, [phrase]: audioUrl });
+        audioRef.current.src = audioUrl;
+        await audioRef.current.play();
+      } catch (err) {
+        console.error('Error playing audio:', err);
+      }
+    }
   };
 
   const startListening = () => {
@@ -108,8 +135,8 @@ function Lesson({ lesson, language, onComplete }) {
     }
   };
 
-  if (isLoading) {
-    return <p>Generating lesson content...</p>;
+  if (isLoading || isGeneratingAudio) {
+    return <p>Preparing lesson content...</p>;
   }
 
   if (error) {
