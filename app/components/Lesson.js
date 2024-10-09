@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
-function Lesson({ lesson, language, onComplete }) {
+function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLesson }) {
   const [content, setContent] = useState(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [feedback, setFeedback] = useState(null);
@@ -11,16 +11,26 @@ function Lesson({ lesson, language, onComplete }) {
   const [error, setError] = useState(null);
   const [audioCache, setAudioCache] = useState({});
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [isVADListening, setIsVADListening] = useState(false);
   const recognition = useRef(null);
   const audioRef = useRef(new Audio());
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const microphoneStreamRef = useRef(null);
 
   useEffect(() => {
     if ('webkitSpeechRecognition' in window) {
       recognition.current = new window.webkitSpeechRecognition();
-      recognition.current.continuous = false;
+      recognition.current.continuous = true;
+      recognition.current.interimResults = true;
       recognition.current.lang = language;
       recognition.current.onresult = handleSpeechResult;
+      recognition.current.onend = handleSpeechEnd;
     }
+
+    return () => {
+      stopListening();
+    };
   }, [language]);
 
   useEffect(() => {
@@ -101,15 +111,73 @@ function Lesson({ lesson, language, onComplete }) {
     }
   };
 
-  const startListening = () => {
+  const startListening = async () => {
     setIsListening(true);
-    recognition.current.start();
+    setFeedback(null);
+    setIsVADListening(true);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      microphoneStreamRef.current = stream;
+
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      const microphone = audioContextRef.current.createMediaStreamSource(stream);
+      microphone.connect(analyserRef.current);
+
+      const detectVoiceActivity = () => {
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(dataArray);
+
+        const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+        
+        if (average > 20) { // Adjust this threshold as needed
+          if (!isListening) {
+            recognition.current.start();
+          }
+        } else {
+          if (isListening) {
+            recognition.current.stop();
+          }
+        }
+
+        if (isVADListening) {
+          requestAnimationFrame(detectVoiceActivity);
+        }
+      };
+
+      detectVoiceActivity();
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+      setIsListening(false);
+      setIsVADListening(false);
+    }
+  };
+
+  const stopListening = () => {
+    setIsListening(false);
+    setIsVADListening(false);
+    if (recognition.current) {
+      recognition.current.stop();
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
+    if (microphoneStreamRef.current) {
+      microphoneStreamRef.current.getTracks().forEach(track => track.stop());
+    }
   };
 
   const handleSpeechResult = (event) => {
     const last = event.results.length - 1;
     const userSaid = event.results[last][0].transcript;
-    checkAnswer(userSaid);
+    if (event.results[last].isFinal) {
+      checkAnswer(userSaid);
+      stopListening();
+    }
+  };
+
+  const handleSpeechEnd = () => {
     setIsListening(false);
   };
 
@@ -135,74 +203,130 @@ function Lesson({ lesson, language, onComplete }) {
     }
   };
 
+  // UI Components
+  const LoadingSpinner = () => (
+    <div className="flex justify-center items-center h-64">
+      <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+    </div>
+  );
+
+  const ErrorMessage = ({ message }) => (
+    <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-md">
+      <p className="font-bold">Error</p>
+      <p>{message}</p>
+      <p className="mt-2">Please try refreshing the page or selecting a different lesson.</p>
+    </div>
+  );
+
+  const ProgressBar = () => {
+    const progress = (currentExerciseIndex / content.exercises.length) * 100;
+    return (
+      <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
+        <div
+          className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-in-out"
+          style={{ width: `${progress}%` }}
+        ></div>
+      </div>
+    );
+  };
+
+  const ExercisePrompt = ({ prompt }) => (
+    <h3 className="text-xl font-semibold mb-4 text-gray-800">{prompt}</h3>
+  );
+
+  const Button = ({ onClick, className, children }) => (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 rounded-md font-semibold text-white transition-colors duration-200 ${className}`}
+    >
+      {children}
+    </button>
+  );
+
   if (isLoading || isGeneratingAudio) {
-    return <p>Preparing lesson content...</p>;
+    return <LoadingSpinner />;
   }
 
   if (error) {
-    return (
-      <div className="text-red-500">
-        <p>{error}</p>
-        <p>Please try refreshing the page or selecting a different lesson.</p>
-      </div>
-    );
+    return <ErrorMessage message={error} />;
   }
 
   if (!content || !content.introduction || !Array.isArray(content.exercises)) {
-    return <p>Invalid lesson content received. Please try again.</p>;
+    return <ErrorMessage message="Invalid lesson content received. Please try again." />;
   }
+
+  const handleNextLesson = () => {
+    if (nextLessonId && onNavigateToNextLesson) {
+      onNavigateToNextLesson(nextLessonId);
+    }
+  };
 
   const currentExercise = content.exercises[currentExerciseIndex];
 
   return (
-    <div className="Lesson">
-      <h2 className="text-2xl mb-4">{lesson.title}</h2>
-      {currentExerciseIndex === 0 && <p className="mb-4">{content.introduction}</p>}
-      <div className="exercise bg-gray-100 p-4 rounded mb-4">
-        <p className="font-bold mb-2">{currentExercise.prompt}</p>
+    <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
+      <h2 className="text-3xl font-bold mb-6 text-center text-blue-600">{lesson.title}</h2>
+      <ProgressBar />
+      {currentExerciseIndex === 0 && <p className="mb-6 text-gray-700">{content.introduction}</p>}
+      <div className="bg-gray-100 p-6 rounded-lg mb-6">
+        <ExercisePrompt prompt={currentExercise.prompt} />
         {currentExercise.type === 'listen_and_repeat' && (
-          <div>
-            <p className="mb-2">{currentExercise.phrase}</p>
-            <p className="text-gray-600 mb-2">Translation: {currentExercise.translation}</p>
-            <button
-              onClick={() => speakPhrase(currentExercise.phrase)}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mr-2"
-            >
-              Listen
-            </button>
-            <button
-              onClick={startListening}
-              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-              disabled={isListening}
-            >
-              {isListening ? 'Listening...' : 'Speak'}
-            </button>
+          <div className="space-y-4">
+            <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
+            <p className="text-gray-600 italic">{currentExercise.translation}</p>
+            <div className="flex space-x-4">
+              <Button
+                onClick={() => speakPhrase(currentExercise.phrase)}
+                className="bg-blue-500 hover:bg-blue-600"
+              >
+                Listen
+              </Button>
+              <Button
+                onClick={isVADListening ? stopListening : startListening}
+                className={isVADListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
+              >
+                {isVADListening ? 'Stop Listening' : 'Start Listening'}
+              </Button>
+            </div>
+            {isVADListening && <p className="text-sm text-gray-600 mt-2">Listening for voice activity...</p>}
           </div>
         )}
         {currentExercise.type === 'speak_and_check' && (
-          <div>
-            <p className="mb-2">{currentExercise.phrase}</p>
-            <button
-              onClick={startListening}
-              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-              disabled={isListening}
+          <div className="space-y-4">
+            <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
+            <Button
+              onClick={isVADListening ? stopListening : startListening}
+              className={isVADListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
             >
-              {isListening ? 'Listening...' : 'Speak'}
-            </button>
+              {isVADListening ? 'Stop Listening' : 'Start Listening'}
+            </Button>
+            {isVADListening && <p className="text-sm text-gray-600 mt-2">Listening for voice activity...</p>}
           </div>
         )}
       </div>
       {feedback && (
-        <div>
-          <p className={feedback.startsWith('Correct') ? 'text-green-500' : 'text-red-500'}>
-            {feedback}
-          </p>
-          <button
-            onClick={nextExercise}
-            className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-          >
-            Next
-          </button>
+        <div className={`p-4 rounded-lg mb-6 ${feedback.startsWith('Correct') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+          <p className="font-medium">{feedback}</p>
+        </div>
+      )}
+      {feedback && (
+        <div className="flex justify-center space-x-4">
+          {currentExerciseIndex < content.exercises.length - 1 ? (
+            <Button onClick={nextExercise} className="bg-blue-500 hover:bg-blue-600">
+              Next Exercise
+            </Button>
+          ) : (
+            <>
+              <Button onClick={onComplete} className="bg-green-500 hover:bg-green-600">
+                Complete Lesson
+              </Button>
+              {nextLessonId && onNavigateToNextLesson && (
+                <Button onClick={handleNextLesson} className="bg-blue-500 hover:bg-blue-600">
+                  Next Lesson
+                </Button>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
