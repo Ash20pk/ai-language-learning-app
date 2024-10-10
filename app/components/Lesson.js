@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLesson }) {
   const [content, setContent] = useState(null);
@@ -11,30 +11,15 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
   const [error, setError] = useState(null);
   const [audioCache, setAudioCache] = useState({});
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
-  const [isVADListening, setIsVADListening] = useState(false);
+  const [isPlayingGuidedAudio, setIsPlayingGuidedAudio] = useState(false);
   const recognition = useRef(null);
+  const isRecognitionInitialized = useRef(false);
   const audioRef = useRef(new Audio());
-  const audioContextRef = useRef(null);
-  const analyserRef = useRef(null);
-  const microphoneStreamRef = useRef(null);
-
-  useEffect(() => {
-    if ('webkitSpeechRecognition' in window) {
-      recognition.current = new window.webkitSpeechRecognition();
-      recognition.current.continuous = true;
-      recognition.current.interimResults = true;
-      recognition.current.lang = language;
-      recognition.current.onresult = handleSpeechResult;
-      recognition.current.onend = handleSpeechEnd;
-    }
-
-    return () => {
-      stopListening();
-    };
-  }, [language]);
+  const guidedAudioRef = useRef(new Audio());
 
   useEffect(() => {
     async function fetchLessonContent() {
+      console.log('Fetching lesson content for:', lesson.title);
       try {
         setIsLoading(true);
         const response = await fetch('/api/generate-lesson', {
@@ -44,15 +29,22 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
           },
           body: JSON.stringify({ language, lessonTitle: lesson.title }),
         });
+        console.log('API response status:', response.status);
         if (!response.ok) {
-          throw new Error('Failed to fetch lesson content');
+          throw new Error(`Failed to fetch lesson content: ${response.status} ${response.statusText}`);
         }
         const data = await response.json();
+        console.log('Received lesson content:', data);
+        if (!data || !data.exercises || !Array.isArray(data.exercises)) {
+          throw new Error('Invalid lesson content structure received');
+        }
         setContent(data);
+        console.log('Content set in state:', data);
         await preGenerateAudio(data.exercises);
+        await playGuidedAudio(`Welcome to the lesson: ${lesson.title}. Let's begin with the first exercise.`);
       } catch (err) {
+        console.error('Error fetching lesson content:', err);
         setError(`Failed to generate lesson content: ${err.message}`);
-        console.error('Full error:', err);
       } finally {
         setIsLoading(false);
       }
@@ -62,6 +54,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
   }, [lesson, language]);
 
   const preGenerateAudio = async (exercises) => {
+    console.log('Pre-generating audio');
     setIsGeneratingAudio(true);
     const newAudioCache = { ...audioCache };
     for (const exercise of exercises) {
@@ -76,9 +69,11 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     }
     setAudioCache(newAudioCache);
     setIsGeneratingAudio(false);
+    console.log('Audio pre-generation complete');
   };
 
   const generateAudio = async (text) => {
+    console.log('Generating audio for:', text);
     const response = await fetch('/api/generate-audio', {
       method: 'POST',
       headers: {
@@ -94,7 +89,32 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     return await response.blob();
   };
 
+  const playGuidedAudio = useCallback(async (text) => {
+    console.log('Playing guided audio:', text);
+    if (isPlayingGuidedAudio) {
+      console.log('Guided audio is already playing. Skipping:', text);
+      return;
+    }
+    
+    setIsPlayingGuidedAudio(true);
+    try {
+      const audioBlob = await generateAudio(text);
+      const audioUrl = URL.createObjectURL(audioBlob);
+      guidedAudioRef.current.src = audioUrl;
+      guidedAudioRef.current.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        setIsPlayingGuidedAudio(false);
+        console.log('Guided audio playback ended');
+      };
+      await guidedAudioRef.current.play();
+    } catch (error) {
+      console.error('Error playing guided audio:', error);
+      setIsPlayingGuidedAudio(false);
+    }
+  }, [isPlayingGuidedAudio]);
+
   const speakPhrase = async (phrase) => {
+    console.log('Speaking phrase:', phrase);
     if (audioCache[phrase]) {
       audioRef.current.src = audioCache[phrase];
       await audioRef.current.play();
@@ -109,99 +129,138 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
         console.error('Error playing audio:', err);
       }
     }
+    await playGuidedAudio("Now, please repeat the phrase.");
   };
 
-  const startListening = async () => {
-    setIsListening(true);
-    setFeedback(null);
-    setIsVADListening(true);
+  const checkAnswer = useCallback((userSaid) => {
+    console.log('Checking answer. Content:', content);
+    console.log('Current exercise index:', currentExerciseIndex);
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      microphoneStreamRef.current = stream;
-
-      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      const microphone = audioContextRef.current.createMediaStreamSource(stream);
-      microphone.connect(analyserRef.current);
-
-      const detectVoiceActivity = () => {
-        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-        analyserRef.current.getByteFrequencyData(dataArray);
-
-        const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
-        
-        if (average > 20) { // Adjust this threshold as needed
-          if (!isListening) {
-            recognition.current.start();
-          }
-        } else {
-          if (isListening) {
-            recognition.current.stop();
-          }
-        }
-
-        if (isVADListening) {
-          requestAnimationFrame(detectVoiceActivity);
-        }
-      };
-
-      detectVoiceActivity();
-    } catch (err) {
-      console.error('Error accessing microphone:', err);
-      setIsListening(false);
-      setIsVADListening(false);
+    if (!content) {
+      console.error('Content is null or undefined');
+      setFeedback('Sorry, there was an error checking your answer. Please try again.');
+      return;
     }
-  };
 
-  const stopListening = () => {
-    setIsListening(false);
-    setIsVADListening(false);
-    if (recognition.current) {
-      recognition.current.stop();
+    if (!Array.isArray(content.exercises)) {
+      console.error('content.exercises is not an array:', content.exercises);
+      setFeedback('Sorry, there was an error with the lesson structure. Please try again.');
+      return;
     }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-    }
-    if (microphoneStreamRef.current) {
-      microphoneStreamRef.current.getTracks().forEach(track => track.stop());
-    }
-  };
 
-  const handleSpeechResult = (event) => {
-    const last = event.results.length - 1;
-    const userSaid = event.results[last][0].transcript;
-    if (event.results[last].isFinal) {
-      checkAnswer(userSaid);
-      stopListening();
+    if (currentExerciseIndex < 0 || currentExerciseIndex >= content.exercises.length) {
+      console.error('Current exercise index is out of bounds:', currentExerciseIndex);
+      setFeedback('Sorry, there was an error with the current exercise. Please try again.');
+      return;
     }
-  };
 
-  const handleSpeechEnd = () => {
-    setIsListening(false);
-  };
-
-  const checkAnswer = (userSaid) => {
     const currentExercise = content.exercises[currentExerciseIndex];
+    console.log('Current exercise:', currentExercise);
+
+    if (!currentExercise) {
+      console.error('Current exercise is null or undefined');
+      setFeedback('Sorry, there was an error with the current exercise. Please try again.');
+      return;
+    }
+
     const correctAnswer = currentExercise.type === 'speak_and_check' 
       ? currentExercise.correctResponse 
       : currentExercise.phrase;
-    
+
+    console.log('User said:', userSaid);
+    console.log('Correct answer:', correctAnswer);
+
     if (userSaid.toLowerCase().trim() === correctAnswer.toLowerCase().trim()) {
+      console.log('Answer is correct');
       setFeedback('Correct!');
+      playGuidedAudio("Excellent! That's correct.");
     } else {
+      console.log('Answer is incorrect');
       setFeedback(`Not quite. The correct phrase is: "${correctAnswer}"`);
+      playGuidedAudio(`Not quite. The correct phrase is: "${correctAnswer}". Let's try again.`);
     }
-  };
+  }, [content, currentExerciseIndex, playGuidedAudio]);
+
+  const initializeSpeechRecognition = useCallback(() => {
+    if ('webkitSpeechRecognition' in window && !isRecognitionInitialized.current && content) {
+      recognition.current = new window.webkitSpeechRecognition();
+      recognition.current.continuous = false;
+      recognition.current.interimResults = false;
+      recognition.current.lang = language;
+
+      recognition.current.onresult = (event) => {
+        const userSaid = event.results[0][0].transcript;
+        console.log('Speech recognized:', userSaid);
+        checkAnswer(userSaid);
+      };
+
+      recognition.current.onend = () => {
+        console.log('Speech recognition ended');
+        setIsListening(false);
+      };
+
+      recognition.current.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      isRecognitionInitialized.current = true;
+      console.log('Speech recognition initialized');
+    }
+  }, [language, checkAnswer, content]);
+
+  useEffect(() => {
+    if (content) {
+      initializeSpeechRecognition();
+    }
+  }, [content, initializeSpeechRecognition]);
+
+  const startListening = useCallback(() => {
+    console.log('Starting listening, content:', content);
+    if (!content || !content.exercises || content.exercises.length <= currentExerciseIndex) {
+      console.error('Lesson content not available', { content, currentExerciseIndex });
+      setFeedback('Sorry, the lesson is not ready yet. Please wait a moment and try again.');
+      return;
+    }
+
+    if (!isRecognitionInitialized.current) {
+      initializeSpeechRecognition();
+    }
+
+    if (recognition.current) {
+      setIsListening(true);
+      setFeedback(null);
+      recognition.current.start();
+    } else {
+      console.error('Speech recognition not initialized');
+      setFeedback('Sorry, speech recognition is not available. Please try again.');
+    }
+  }, [content, currentExerciseIndex, initializeSpeechRecognition]);
+
+  const stopListening = useCallback(() => {
+    console.log('Stopping listening');
+    if (recognition.current) {
+      recognition.current.stop();
+    }
+    setIsListening(false);
+  }, []);
 
   const nextExercise = () => {
+    console.log('Moving to next exercise');
     if (currentExerciseIndex < content.exercises.length - 1) {
       setCurrentExerciseIndex(currentExerciseIndex + 1);
       setFeedback(null);
+      playGuidedAudio("Great! Let's move on to the next exercise.");
     } else {
+      console.log('Lesson completed');
       onComplete();
+      playGuidedAudio("Congratulations! You've completed this lesson.");
     }
   };
+
+  useEffect(() => {
+    console.log('Content updated:', content);
+  }, [content]);
 
   // UI Components
   const LoadingSpinner = () => (
@@ -219,6 +278,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
   );
 
   const ProgressBar = () => {
+    if (!content || !content.exercises) return null;
     const progress = (currentExerciseIndex / content.exercises.length) * 100;
     return (
       <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
@@ -243,6 +303,14 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     </button>
   );
 
+  console.log('Rendering Lesson component', { 
+    isLoading, 
+    isGeneratingAudio, 
+    error, 
+    contentAvailable: !!content, 
+    currentExerciseIndex 
+  });
+
   if (isLoading || isGeneratingAudio) {
     return <LoadingSpinner />;
   }
@@ -251,11 +319,12 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     return <ErrorMessage message={error} />;
   }
 
-  if (!content || !content.introduction || !Array.isArray(content.exercises)) {
+  if (!content || !content.introduction || !Array.isArray(content.exercises) || content.exercises.length === 0) {
     return <ErrorMessage message="Invalid lesson content received. Please try again." />;
   }
 
   const handleNextLesson = () => {
+    console.log('Navigating to next lesson');
     if (nextLessonId && onNavigateToNextLesson) {
       onNavigateToNextLesson(nextLessonId);
     }
@@ -267,43 +336,45 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
       <h2 className="text-3xl font-bold mb-6 text-center text-blue-600">{lesson.title}</h2>
       <ProgressBar />
-      {currentExerciseIndex === 0 && <p className="mb-6 text-gray-700">{content.introduction}</p>}
-      <div className="bg-gray-100 p-6 rounded-lg mb-6">
-        <ExercisePrompt prompt={currentExercise.prompt} />
-        {currentExercise.type === 'listen_and_repeat' && (
-          <div className="space-y-4">
-            <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
-            <p className="text-gray-600 italic">{currentExercise.translation}</p>
-            <div className="flex space-x-4">
+      {currentExerciseIndex === 0 && content.introduction && (
+        <p className="mb-6 text-gray-700">{content.introduction}</p>
+      )}
+      {currentExercise && (
+        <div className="bg-gray-100 p-6 rounded-lg mb-6">
+          <ExercisePrompt prompt={currentExercise.prompt} />
+          {currentExercise.type === 'listen_and_repeat' && (
+            <div className="space-y-4">
+              <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
+              <p className="text-gray-600 italic">{currentExercise.translation}</p>
+              <div className="flex space-x-4">
+                <Button
+                  onClick={() => speakPhrase(currentExercise.phrase)}
+                  className="bg-blue-500 hover:bg-blue-600"
+                >
+                  Listen
+                </Button>
+                <Button
+                  onClick={isListening ? stopListening : startListening}
+                  className={isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
+                >
+                  {isListening ? 'Stop' : 'Speak'}
+                </Button>
+              </div>
+            </div>
+          )}
+          {currentExercise.type === 'speak_and_check' && (
+            <div className="space-y-4">
+              <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
               <Button
-                onClick={() => speakPhrase(currentExercise.phrase)}
-                className="bg-blue-500 hover:bg-blue-600"
+                onClick={isListening ? stopListening : startListening}
+                className={isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
               >
-                Listen
-              </Button>
-              <Button
-                onClick={isVADListening ? stopListening : startListening}
-                className={isVADListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
-              >
-                {isVADListening ? 'Stop Listening' : 'Start Listening'}
+                {isListening ? 'Stop' : 'Speak'}
               </Button>
             </div>
-            {isVADListening && <p className="text-sm text-gray-600 mt-2">Listening for voice activity...</p>}
-          </div>
-        )}
-        {currentExercise.type === 'speak_and_check' && (
-          <div className="space-y-4">
-            <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
-            <Button
-              onClick={isVADListening ? stopListening : startListening}
-              className={isVADListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
-            >
-              {isVADListening ? 'Stop Listening' : 'Start Listening'}
-            </Button>
-            {isVADListening && <p className="text-sm text-gray-600 mt-2">Listening for voice activity...</p>}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
       {feedback && (
         <div className={`p-4 rounded-lg mb-6 ${feedback.startsWith('Correct') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
           <p className="font-medium">{feedback}</p>
