@@ -16,10 +16,9 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
   const isRecognitionInitialized = useRef(false);
   const audioRef = useRef(new Audio());
   const guidedAudioRef = useRef(new Audio());
-  const [transcription, setTranscription] = useState('');
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const audioChunks = useRef([]);
-  const mediaRecorder = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   useEffect(() => {
     async function fetchLessonContent() {
@@ -83,7 +82,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ text, language }),
+      body: JSON.stringify({ text }),
     });
 
     if (!response.ok) {
@@ -137,44 +136,26 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
   };
 
   const checkAnswer = useCallback((userSaid) => {
-    console.log('Checking answer. Content:', content);
-    console.log('Current exercise index:', currentExerciseIndex);
+    console.log('Checking answer. User said:', userSaid);
 
-    if (!content) {
-      console.error('Content is null or undefined');
+    if (!content || !Array.isArray(content.exercises) || currentExerciseIndex < 0 || currentExerciseIndex >= content.exercises.length) {
+      console.error('Invalid content or exercise index');
       setFeedback('Sorry, there was an error checking your answer. Please try again.');
       return;
     }
 
-    if (!Array.isArray(content.exercises)) {
-      console.error('content.exercises is not an array:', content.exercises);
-      setFeedback('Sorry, there was an error with the lesson structure. Please try again.');
-      return;
-    }
-
-    if (currentExerciseIndex < 0 || currentExerciseIndex >= content.exercises.length) {
-      console.error('Current exercise index is out of bounds:', currentExerciseIndex);
-      setFeedback('Sorry, there was an error with the current exercise. Please try again.');
-      return;
-    }
-
     const currentExercise = content.exercises[currentExerciseIndex];
-    console.log('Current exercise:', currentExercise);
-
-    if (!currentExercise) {
-      console.error('Current exercise is null or undefined');
-      setFeedback('Sorry, there was an error with the current exercise. Please try again.');
-      return;
-    }
-
     const correctAnswer = currentExercise.type === 'speak_and_check' 
       ? currentExercise.correctResponse 
       : currentExercise.phrase;
 
-    console.log('User said:', userSaid);
-    console.log('Correct answer:', correctAnswer);
+    const normalizedUserSaid = userSaid.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+    const normalizedCorrectAnswer = correctAnswer.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
 
-    if (userSaid.toLowerCase().trim() === correctAnswer.toLowerCase().trim()) {
+    const similarity = stringSimilarity(normalizedUserSaid, normalizedCorrectAnswer);
+    const threshold = 0.8;
+
+    if (similarity >= threshold) {
       console.log('Answer is correct');
       setFeedback('Correct!');
       playGuidedAudio("Excellent! That's correct.");
@@ -184,6 +165,98 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
       playGuidedAudio(`Not quite. The correct phrase is: "${correctAnswer}". Let's try again.`);
     }
   }, [content, currentExerciseIndex, playGuidedAudio]);
+
+  const startRecording = useCallback(() => {
+    console.log('Starting recording');
+    setIsListening(true);
+    setFeedback(null);
+    audioChunksRef.current = [];
+
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        mediaRecorderRef.current = new MediaRecorder(stream);
+        mediaRecorderRef.current.ondataavailable = (event) => {
+          audioChunksRef.current.push(event.data);
+        };
+        mediaRecorderRef.current.start();
+      })
+      .catch(error => {
+        console.error('Error accessing microphone:', error);
+        setFeedback('Unable to access microphone. Please check your settings and try again.');
+      });
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    console.log('Stopping recording');
+    setIsListening(false);
+    setIsTranscribing(true);
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        try {
+          const transcription = await transcribeAudio(audioBlob);
+          checkAnswer(transcription);
+        } catch (error) {
+          console.error('Transcription error:', error);
+          setFeedback('Sorry, there was an error processing your speech. Please try again.');
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+    }
+  }, [checkAnswer]);
+
+  const transcribeAudio = async (audioBlob) => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'audio.webm');
+    formData.append('language', language);
+
+    const response = await fetch('/api/transcribe-audio', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to transcribe audio');
+    }
+
+    const data = await response.json();
+    return data.text; // Changed from data.transcription to data.text
+  };
+
+  // Simple string similarity function (Levenshtein distance)
+  const stringSimilarity = (a, b) => {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+
+    const matrix = [];
+
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+
+    return 1 - (matrix[b.length][a.length] / Math.max(a.length, b.length));
+  };
 
   const initializeSpeechRecognition = useCallback(() => {
     if ('webkitSpeechRecognition' in window && !isRecognitionInitialized.current && content) {
@@ -219,64 +292,6 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     }
   }, [content, initializeSpeechRecognition]);
 
-  const startRecording = useCallback(() => {
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then(stream => {
-        mediaRecorder.current = new MediaRecorder(stream);
-        audioChunks.current = [];
-
-        mediaRecorder.current.ondataavailable = (event) => {
-          audioChunks.current.push(event.data);
-        };
-
-        mediaRecorder.current.onstop = async () => {
-          const audioBlob = new Blob(audioChunks.current, { type: 'audio/wav' });
-          await transcribeAudio(audioBlob);
-        };
-
-        mediaRecorder.current.start();
-        setIsListening(true);
-      })
-      .catch(error => {
-        console.error('Error accessing microphone:', error);
-        setFeedback('Error accessing microphone. Please check your permissions.');
-      });
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
-      mediaRecorder.current.stop();
-      setIsListening(false);
-    }
-  }, []);
-
-  const transcribeAudio = async (audioBlob) => {
-    setIsTranscribing(true);
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'audio.wav'); // Add a filename
-    formData.append('language', language); // Make sure 'language' is the full name, e.g., 'Spanish'
-
-    try {
-      const response = await fetch('/api/transcribe-audio', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to transcribe audio');
-      }
-
-      const data = await response.json();
-      setTranscription(data.text);
-      checkAnswer(data.text);
-    } catch (error) {
-      console.error('Error transcribing audio:', error);
-      setFeedback('Error transcribing audio. Please try again.');
-    } finally {
-      setIsTranscribing(false);
-    }
-  };
-
   const startListening = useCallback(() => {
     console.log('Starting listening, content:', content);
     if (!content || !content.exercises || content.exercises.length <= currentExerciseIndex) {
@@ -285,14 +300,27 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
       return;
     }
 
-    setFeedback(null);
-    startRecording();
-  }, [content, currentExerciseIndex, startRecording]);
+    if (!isRecognitionInitialized.current) {
+      initializeSpeechRecognition();
+    }
+
+    if (recognition.current) {
+      setIsListening(true);
+      setFeedback(null);
+      recognition.current.start();
+    } else {
+      console.error('Speech recognition not initialized');
+      setFeedback('Sorry, speech recognition is not available. Please try again.');
+    }
+  }, [content, currentExerciseIndex, initializeSpeechRecognition]);
 
   const stopListening = useCallback(() => {
     console.log('Stopping listening');
-    stopRecording();
-  }, [stopRecording]);
+    if (recognition.current) {
+      recognition.current.stop();
+    }
+    setIsListening(false);
+  }, []);
 
   const nextExercise = () => {
     console.log('Moving to next exercise');
@@ -343,10 +371,11 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     <h3 className="text-xl font-semibold mb-4 text-gray-800">{prompt}</h3>
   );
 
-  const Button = ({ onClick, className, children }) => (
+  const Button = ({ onClick, className, children, disabled }) => (
     <button
       onClick={onClick}
-      className={`px-4 py-2 rounded-md font-semibold text-white transition-colors duration-200 ${className}`}
+      className={`px-4 py-2 rounded-md font-semibold text-white transition-colors duration-200 ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      disabled={disabled}
     >
       {children}
     </button>
@@ -403,10 +432,11 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
                   Listen
                 </Button>
                 <Button
-                  onClick={isListening ? stopListening : startListening}
+                  onClick={isListening ? stopRecording : startRecording}
                   className={isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
+                  disabled={isTranscribing}
                 >
-                  {isListening ? 'Stop' : 'Speak'}
+                  {isListening ? 'Stop' : isTranscribing ? 'Transcribing...' : 'Speak'}
                 </Button>
               </div>
             </div>
@@ -415,10 +445,11 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
             <div className="space-y-4">
               <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
               <Button
-                onClick={isListening ? stopListening : startListening}
+                onClick={isListening ? stopRecording : startRecording}
                 className={isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
+                disabled={isTranscribing}
               >
-                {isListening ? 'Stop' : 'Speak'}
+                {isListening ? 'Stop' : isTranscribing ? 'Transcribing...' : 'Speak'}
               </Button>
             </div>
           )}
