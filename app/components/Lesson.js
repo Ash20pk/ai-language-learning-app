@@ -16,6 +16,10 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
   const isRecognitionInitialized = useRef(false);
   const audioRef = useRef(new Audio());
   const guidedAudioRef = useRef(new Audio());
+  const [transcription, setTranscription] = useState('');
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const audioChunks = useRef([]);
+  const mediaRecorder = useRef(null);
 
   useEffect(() => {
     async function fetchLessonContent() {
@@ -79,7 +83,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, language }),
     });
 
     if (!response.ok) {
@@ -215,6 +219,64 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     }
   }, [content, initializeSpeechRecognition]);
 
+  const startRecording = useCallback(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        mediaRecorder.current = new MediaRecorder(stream);
+        audioChunks.current = [];
+
+        mediaRecorder.current.ondataavailable = (event) => {
+          audioChunks.current.push(event.data);
+        };
+
+        mediaRecorder.current.onstop = async () => {
+          const audioBlob = new Blob(audioChunks.current, { type: 'audio/wav' });
+          await transcribeAudio(audioBlob);
+        };
+
+        mediaRecorder.current.start();
+        setIsListening(true);
+      })
+      .catch(error => {
+        console.error('Error accessing microphone:', error);
+        setFeedback('Error accessing microphone. Please check your permissions.');
+      });
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
+      mediaRecorder.current.stop();
+      setIsListening(false);
+    }
+  }, []);
+
+  const transcribeAudio = async (audioBlob) => {
+    setIsTranscribing(true);
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'audio.wav'); // Add a filename
+    formData.append('language', language); // Make sure 'language' is the full name, e.g., 'Spanish'
+
+    try {
+      const response = await fetch('/api/transcribe-audio', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to transcribe audio');
+      }
+
+      const data = await response.json();
+      setTranscription(data.text);
+      checkAnswer(data.text);
+    } catch (error) {
+      console.error('Error transcribing audio:', error);
+      setFeedback('Error transcribing audio. Please try again.');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
   const startListening = useCallback(() => {
     console.log('Starting listening, content:', content);
     if (!content || !content.exercises || content.exercises.length <= currentExerciseIndex) {
@@ -223,27 +285,14 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
       return;
     }
 
-    if (!isRecognitionInitialized.current) {
-      initializeSpeechRecognition();
-    }
-
-    if (recognition.current) {
-      setIsListening(true);
-      setFeedback(null);
-      recognition.current.start();
-    } else {
-      console.error('Speech recognition not initialized');
-      setFeedback('Sorry, speech recognition is not available. Please try again.');
-    }
-  }, [content, currentExerciseIndex, initializeSpeechRecognition]);
+    setFeedback(null);
+    startRecording();
+  }, [content, currentExerciseIndex, startRecording]);
 
   const stopListening = useCallback(() => {
     console.log('Stopping listening');
-    if (recognition.current) {
-      recognition.current.stop();
-    }
-    setIsListening(false);
-  }, []);
+    stopRecording();
+  }, [stopRecording]);
 
   const nextExercise = () => {
     console.log('Moving to next exercise');
