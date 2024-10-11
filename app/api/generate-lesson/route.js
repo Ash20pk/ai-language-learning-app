@@ -18,7 +18,7 @@ export async function POST(req) {
         },
         {
           role: "user",
-          content: `Create an interactive lesson for learning ${language} on the topic "${lessonTitle}". Provide a JSON object with the following structure:
+          content: `Create an interactive lesson for learning ${language} on the topic "${lessonTitle}". All exercises should be "listen and repeat" type. Provide a JSON object with the following structure:
           {
             "introduction": "Brief introduction to the lesson",
             "exercises": [
@@ -27,16 +27,10 @@ export async function POST(req) {
                 "prompt": "Listen and repeat the following phrase",
                 "phrase": "Phrase in ${language}",
                 "translation": "English translation of the phrase"
-              },
-              {
-                "type": "speak_and_check",
-                "prompt": "Say the following phrase in ${language}",
-                "phrase": "Phrase in English",
-                "correctResponse": "Correct phrase in ${language}"
               }
             ]
           }
-          Provide 5 exercises alternating between "listen_and_repeat" and "speak_and_check" types. Respond with the JSON object only, no additional text or formatting.`
+          Provide 5 exercises, all of "listen_and_repeat" type. Each exercise should introduce a new phrase related to the lesson topic. Ensure the phrases progress in complexity throughout the lesson. Respond with the JSON object only, no additional text or formatting.`
         }
       ],
     });

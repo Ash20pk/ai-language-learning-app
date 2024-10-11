@@ -4,12 +4,15 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import Lesson from './Lesson';
 
-function Curriculum({ language }) {
+function Curriculum({ languageCode, language }) {
   const { user } = useAuth();
   const [curriculum, setCurriculum] = useState(null);
   const [currentLesson, setCurrentLesson] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  console.log("language", language);
+  console.log("languageCode", languageCode);
 
   useEffect(() => {
     async function fetchCurriculum() {
@@ -20,7 +23,7 @@ function Curriculum({ language }) {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ language }),
+          body: JSON.stringify({ language, languageCode }),
         });
         if (!response.ok) {
           const errorData = await response.json();
@@ -40,7 +43,7 @@ function Curriculum({ language }) {
     }
 
     fetchCurriculum();
-  }, [language]);
+  }, [language, languageCode]);
 
   const startLesson = (lesson) => {
     setCurrentLesson(lesson);
@@ -55,7 +58,22 @@ function Curriculum({ language }) {
   }
 
   if (currentLesson) {
-    return <Lesson lesson={currentLesson} language={language} onComplete={() => setCurrentLesson(null)} />;
+    console.log(language);
+    return (
+      <Lesson 
+        lesson={currentLesson} 
+        language={language} 
+        languageCode={languageCode} 
+        onComplete={() => setCurrentLesson(null)}
+        nextLessonId={curriculum[curriculum.findIndex(l => l.id === currentLesson.id) + 1]?.id}
+        onNavigateToNextLesson={(nextLessonId) => {
+          const nextLesson = curriculum.find(l => l.id === nextLessonId);
+          if (nextLesson) {
+            setCurrentLesson(nextLesson);
+          }
+        }}
+      />
+    );
   }
 
   if (loading) {

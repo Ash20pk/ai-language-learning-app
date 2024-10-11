@@ -21,8 +21,8 @@ export default function LanguageSelector() {
     return null;
   }
 
-  const handleLanguageSelect = (languageCode) => {
-    router.push(`/curriculum/${languageCode}`);
+  const handleLanguageSelect = (language) => {
+    router.push(`/curriculum/${language.code}?name=${encodeURIComponent(language.name)}`);
   };
 
   return (
@@ -32,7 +32,7 @@ export default function LanguageSelector() {
         {languages.map((language) => (
           <button
             key={language.code}
-            onClick={() => handleLanguageSelect(language.code)}
+            onClick={() => handleLanguageSelect(language)}
             className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow text-left"
           >
             <h2 className="text-xl font-semibold mb-2">{language.name}</h2>

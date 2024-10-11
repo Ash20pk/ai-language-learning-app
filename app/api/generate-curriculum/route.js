@@ -33,10 +33,8 @@ export async function POST(request) {
     });
 
     const content = response.choices[0].message.content;
-    console.log('Raw API response:', content);
 
     const extractedContent = extractJSONFromResponse(content);
-    console.log('Extracted content:', extractedContent);
 
     let curriculum;
 
