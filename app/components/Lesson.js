@@ -107,7 +107,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     });
   };
 
-  const playGuidedAudio = useCallback(async (text, targetLanguage = 'en') => {
+  const playGuidedAudio = useCallback(async (text, targetLanguage) => {
     console.log('Playing guided audio:', text, 'in language:', targetLanguage);
     if (isPlayingGuidedAudio) {
       console.log('Guided audio is already playing. Skipping:', text);
@@ -127,7 +127,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
           await playAudioBlob(audioBlob);
         } else if (part.trim() !== '') {
           // This part is in English
-          const audioBlob = await generateAudio(part);
+          const audioBlob = await generateAudio(part, 'en');
           await playAudioBlob(audioBlob);
         }
       }
@@ -172,6 +172,9 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
 
     const normalizedTranscribedText = transcribedText.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
     const normalizedCorrectAnswer = correctAnswer.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+
+    console.log("normalizedTranscribedText", normalizedTranscribedText);
+    console.log("normalizedCorrectAnswer", correctAnswer);
 
     const similarity = stringSimilarity(normalizedTranscribedText, normalizedCorrectAnswer);
     const threshold = 0.97; // You can adjust this threshold as needed
