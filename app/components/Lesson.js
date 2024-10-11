@@ -173,11 +173,8 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     const normalizedTranscribedText = transcribedText.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
     const normalizedCorrectAnswer = correctAnswer.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
 
-    console.log("normalizedTranscribedText", normalizedTranscribedText);
-    console.log("normalizedCorrectAnswer", correctAnswer);
-
     const similarity = stringSimilarity(normalizedTranscribedText, normalizedCorrectAnswer);
-    const threshold = 0.97; // You can adjust this threshold as needed
+    const threshold = 0.99; // You can adjust this threshold as needed
 
     let feedbackMessage;
     if (similarity >= threshold) {
@@ -354,12 +351,12 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     if (currentExerciseIndex < content.exercises.length - 1) {
       setCurrentExerciseIndex(currentExerciseIndex + 1);
       setFeedback(null);
-      const nextMessage = await translateFeedback("Great! Let's move on to the next phrase.", language);
+      const nextMessage = "Great! Let's move on to the next phrase.";
       playGuidedAudio(nextMessage);
     } else {
       console.log('Lesson completed');
       onComplete();
-      const completionMessage = await translateFeedback("Congratulations! You've completed this lesson.", language);
+      const completionMessage = "Congratulations! You've completed this lesson.";
       playGuidedAudio(completionMessage);
     }
   };
@@ -472,7 +469,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
                 className={isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
                 disabled={isTranscribing}
               >
-                {isListening ? 'Stop' : isTranscribing ? 'Transcribing...' : 'Speak'}
+                {isListening ? 'Stop' : isTranscribing ? 'Checking...' : 'Speak'}
               </Button>
             </div>
           </div>
