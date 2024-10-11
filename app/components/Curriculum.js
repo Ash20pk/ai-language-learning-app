@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import Lesson from './Lesson';
 
 function Curriculum({ language }) {
+  const { user } = useAuth();
   const [curriculum, setCurriculum] = useState(null);
   const [currentLesson, setCurrentLesson] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +45,14 @@ function Curriculum({ language }) {
   const startLesson = (lesson) => {
     setCurrentLesson(lesson);
   };
+
+  if (!user) {
+    return (
+      <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
+        <h2 className="text-3xl font-bold mb-6 text-center text-blue-600">Please log in to view the curriculum</h2>
+      </div>
+    );
+  }
 
   if (currentLesson) {
     return <Lesson lesson={currentLesson} language={language} onComplete={() => setCurrentLesson(null)} />;

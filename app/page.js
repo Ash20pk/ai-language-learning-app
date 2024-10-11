@@ -1,20 +1,18 @@
-'use client';
-
-import { useState } from 'react';
-import LanguageSelector from './components/LanguageSelector';
-import Curriculum from './components/Curriculum';
+import React from 'react';
+import Link from 'next/link';
 
 export default function Home() {
-  const [selectedLanguage, setSelectedLanguage] = useState(null);
-
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <h1 className="text-4xl font-bold mb-8">AI Language Learning Platform</h1>
-      {!selectedLanguage ? (
-        <LanguageSelector onSelectLanguage={setSelectedLanguage} />
-      ) : (
-        <Curriculum language={selectedLanguage} />
-      )}
-    </main>
+    <div className="max-w-4xl mx-auto text-center">
+      <h1 className="text-4xl font-bold mb-6 text-blue-600">Welcome to Language Learning</h1>
+      <p className="text-xl text-gray-700 mb-8">
+        Embark on your language learning journey today! Explore new cultures and connect with people around the world.
+      </p>
+      <div className="space-y-4">
+        <Link href="/auth" className="inline-block bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-600 transition-colors">
+          Get Started
+        </Link>
+      </div>
+    </div>
   );
 }

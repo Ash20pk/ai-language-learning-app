@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
 function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLesson }) {
+  const { user } = useAuth();
   const [content, setContent] = useState(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [feedback, setFeedback] = useState(null);
@@ -75,14 +77,14 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     console.log('Audio pre-generation complete');
   };
 
-  const generateAudio = async (text) => {
-    console.log('Generating audio for:', text);
+  const generateAudio = async (text, lang) => {
+    console.log('Generating audio for:', text, 'in language:', lang);
     const response = await fetch('/api/generate-audio', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, language: lang }),
     });
 
     if (!response.ok) {
@@ -92,8 +94,20 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     return await response.blob();
   };
 
-  const playGuidedAudio = useCallback(async (text) => {
-    console.log('Playing guided audio:', text);
+  const playAudioBlob = async (audioBlob) => {
+    const audioUrl = URL.createObjectURL(audioBlob);
+    guidedAudioRef.current.src = audioUrl;
+    await new Promise((resolve) => {
+      guidedAudioRef.current.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+      guidedAudioRef.current.play();
+    });
+  };
+
+  const playGuidedAudio = useCallback(async (text, targetLanguage = 'en') => {
+    console.log('Playing guided audio:', text, 'in language:', targetLanguage);
     if (isPlayingGuidedAudio) {
       console.log('Guided audio is already playing. Skipping:', text);
       return;
@@ -101,20 +115,28 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     
     setIsPlayingGuidedAudio(true);
     try {
-      const audioBlob = await generateAudio(text);
-      const audioUrl = URL.createObjectURL(audioBlob);
-      guidedAudioRef.current.src = audioUrl;
-      guidedAudioRef.current.onended = () => {
-        URL.revokeObjectURL(audioUrl);
-        setIsPlayingGuidedAudio(false);
-        console.log('Guided audio playback ended');
-      };
-      await guidedAudioRef.current.play();
+      // Split the text into parts, keeping the quotation marks
+      const parts = text.split(/(".*?")/);
+      
+      for (const part of parts) {
+        if (part.startsWith('"') && part.endsWith('"')) {
+          // This part is in the target language (quoted phrase)
+          const targetText = part.slice(1, -1); // Remove quotes
+          const audioBlob = await generateAudio(targetText, targetLanguage);
+          await playAudioBlob(audioBlob);
+        } else if (part.trim() !== '') {
+          // This part is in English
+          const audioBlob = await generateAudio(part, 'en');
+          await playAudioBlob(audioBlob);
+        }
+      }
     } catch (error) {
       console.error('Error playing guided audio:', error);
+    } finally {
       setIsPlayingGuidedAudio(false);
+      console.log('Guided audio playback ended');
     }
-  }, [isPlayingGuidedAudio]);
+  }, [isPlayingGuidedAudio, generateAudio, playAudioBlob]);
 
   const speakPhrase = async (phrase) => {
     console.log('Speaking phrase:', phrase);
@@ -132,11 +154,11 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
         console.error('Error playing audio:', err);
       }
     }
-    await playGuidedAudio("Now, please repeat the phrase.");
+    await playGuidedAudio("Now, please repeat the phrase.", language);
   };
 
-  const checkAnswer = useCallback((userSaid) => {
-    console.log('Checking answer. User said:', userSaid);
+  const checkAnswer = useCallback(async (transcribedText) => {
+    console.log('Checking answer. Transcribed text:', transcribedText);
 
     if (!content || !Array.isArray(content.exercises) || currentExerciseIndex < 0 || currentExerciseIndex >= content.exercises.length) {
       console.error('Invalid content or exercise index');
@@ -145,26 +167,27 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     }
 
     const currentExercise = content.exercises[currentExerciseIndex];
-    const correctAnswer = currentExercise.type === 'speak_and_check' 
-      ? currentExercise.correctResponse 
-      : currentExercise.phrase;
+    const correctAnswer = currentExercise.phrase;
 
-    const normalizedUserSaid = userSaid.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+    const normalizedTranscribedText = transcribedText.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
     const normalizedCorrectAnswer = correctAnswer.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
 
-    const similarity = stringSimilarity(normalizedUserSaid, normalizedCorrectAnswer);
-    const threshold = 0.8;
+    const similarity = stringSimilarity(normalizedTranscribedText, normalizedCorrectAnswer);
+    const threshold = 0.97; // You can adjust this threshold as needed
 
+    let feedbackMessage;
     if (similarity >= threshold) {
       console.log('Answer is correct');
-      setFeedback('Correct!');
-      playGuidedAudio("Excellent! That's correct.");
+      feedbackMessage = "Excellent! That's correct.";
+      setFeedback(feedbackMessage);
     } else {
       console.log('Answer is incorrect');
-      setFeedback(`Not quite. The correct phrase is: "${correctAnswer}"`);
-      playGuidedAudio(`Not quite. The correct phrase is: "${correctAnswer}". Let's try again.`);
+      feedbackMessage = `Not quite. The correct phrase is: "${correctAnswer}". Let's try again.`;
+      setFeedback(feedbackMessage);
     }
-  }, [content, currentExerciseIndex, playGuidedAudio]);
+    
+    await playGuidedAudio(feedbackMessage, language);
+  }, [content, currentExerciseIndex, language, playGuidedAudio]);
 
   const startRecording = useCallback(() => {
     console.log('Starting recording');
@@ -223,7 +246,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     }
 
     const data = await response.json();
-    return data.text; // Changed from data.transcription to data.text
+    return data.text;
   };
 
   // Simple string similarity function (Levenshtein distance)
@@ -322,16 +345,18 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     setIsListening(false);
   }, []);
 
-  const nextExercise = () => {
+  const nextExercise = async () => {
     console.log('Moving to next exercise');
     if (currentExerciseIndex < content.exercises.length - 1) {
       setCurrentExerciseIndex(currentExerciseIndex + 1);
       setFeedback(null);
-      playGuidedAudio("Great! Let's move on to the next exercise.");
+      const nextMessage = await translateFeedback("Great! Let's move on to the next phrase.", language);
+      playGuidedAudio(nextMessage);
     } else {
       console.log('Lesson completed');
       onComplete();
-      playGuidedAudio("Congratulations! You've completed this lesson.");
+      const completionMessage = await translateFeedback("Congratulations! You've completed this lesson.", language);
+      playGuidedAudio(completionMessage);
     }
   };
 
@@ -389,6 +414,14 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     currentExerciseIndex 
   });
 
+  if (!user) {
+    return (
+      <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
+        <h2 className="text-3xl font-bold mb-6 text-center text-blue-600">Please log in to access lessons</h2>
+      </div>
+    );
+  }
+
   if (isLoading || isGeneratingAudio) {
     return <LoadingSpinner />;
   }
@@ -420,30 +453,16 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
       {currentExercise && (
         <div className="bg-gray-100 p-6 rounded-lg mb-6">
           <ExercisePrompt prompt={currentExercise.prompt} />
-          {currentExercise.type === 'listen_and_repeat' && (
-            <div className="space-y-4">
-              <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
-              <p className="text-gray-600 italic">{currentExercise.translation}</p>
-              <div className="flex space-x-4">
-                <Button
-                  onClick={() => speakPhrase(currentExercise.phrase)}
-                  className="bg-blue-500 hover:bg-blue-600"
-                >
-                  Listen
-                </Button>
-                <Button
-                  onClick={isListening ? stopRecording : startRecording}
-                  className={isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
-                  disabled={isTranscribing}
-                >
-                  {isListening ? 'Stop' : isTranscribing ? 'Transcribing...' : 'Speak'}
-                </Button>
-              </div>
-            </div>
-          )}
-          {currentExercise.type === 'speak_and_check' && (
-            <div className="space-y-4">
-              <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
+          <div className="space-y-4">
+            <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
+            <p className="text-gray-600 italic">{currentExercise.translation}</p>
+            <div className="flex space-x-4">
+              <Button
+                onClick={() => speakPhrase(currentExercise.phrase)}
+                className="bg-blue-500 hover:bg-blue-600"
+              >
+                Listen
+              </Button>
               <Button
                 onClick={isListening ? stopRecording : startRecording}
                 className={isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
@@ -452,7 +471,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
                 {isListening ? 'Stop' : isTranscribing ? 'Transcribing...' : 'Speak'}
               </Button>
             </div>
-          )}
+          </div>
         </div>
       )}
       {feedback && (
@@ -464,7 +483,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
         <div className="flex justify-center space-x-4">
           {currentExerciseIndex < content.exercises.length - 1 ? (
             <Button onClick={nextExercise} className="bg-blue-500 hover:bg-blue-600">
-              Next Exercise
+              Next Phrase
             </Button>
           ) : (
             <>
