@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import Lesson from './Lesson';
+import { useRouter } from 'next/navigation';
 
 function Curriculum({ languageCode, language }) {
+  const router = useRouter();
   const { user } = useAuth();
   const [curriculum, setCurriculum] = useState(null);
   const [currentLesson, setCurrentLesson] = useState(null);
@@ -46,7 +48,7 @@ function Curriculum({ languageCode, language }) {
   }, [language, languageCode]);
 
   const startLesson = (lesson) => {
-    setCurrentLesson(lesson);
+    router.push(`/lesson/${lesson.id}?language=${encodeURIComponent(language)}&languageCode=${languageCode}&title=${encodeURIComponent(lesson.title)}`);
   };
 
   if (!user) {

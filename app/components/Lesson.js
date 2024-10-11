@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
-function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLesson }) {
+function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNavigateToNextLesson }) {
   const { user } = useAuth();
   const [content, setContent] = useState(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
@@ -22,6 +22,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
+  console.log("lesson component", language);
   useEffect(() => {
     async function fetchLessonContent() {
       console.log('Fetching lesson content for:', lesson.title);
@@ -32,7 +33,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ language, lessonTitle: lesson.title }),
+          body: JSON.stringify({ language, languageCode, lessonTitle: lesson.title }),
         });
         console.log('API response status:', response.status);
         if (!response.ok) {
@@ -56,7 +57,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     }
 
     fetchLessonContent();
-  }, [lesson, language]);
+  }, [lesson, language, languageCode]);
 
   const preGenerateAudio = async (exercises) => {
     console.log('Pre-generating audio');
@@ -65,7 +66,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     for (const exercise of exercises) {
       if (exercise.type === 'listen_and_repeat' && !newAudioCache[exercise.phrase]) {
         try {
-          const audioBlob = await generateAudio(exercise.phrase);
+          const audioBlob = await generateAudio(exercise.phrase, language);
           newAudioCache[exercise.phrase] = URL.createObjectURL(audioBlob);
         } catch (error) {
           console.error('Error pre-generating audio:', error);
@@ -77,7 +78,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
     console.log('Audio pre-generation complete');
   };
 
-  const generateAudio = async (text, lang) => {
+  const generateAudio = async (text, lang = 'en') => {
     console.log('Generating audio for:', text, 'in language:', lang);
     const response = await fetch('/api/generate-audio', {
       method: 'POST',
@@ -126,7 +127,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
           await playAudioBlob(audioBlob);
         } else if (part.trim() !== '') {
           // This part is in English
-          const audioBlob = await generateAudio(part, 'en');
+          const audioBlob = await generateAudio(part);
           await playAudioBlob(audioBlob);
         }
       }
@@ -475,7 +476,7 @@ function Lesson({ lesson, language, onComplete, nextLessonId, onNavigateToNextLe
         </div>
       )}
       {feedback && (
-        <div className={`p-4 rounded-lg mb-6 ${feedback.startsWith('Correct') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+        <div className={`p-4 rounded-lg mb-6 ${feedback.startsWith('Excellent') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
           <p className="font-medium">{feedback}</p>
         </div>
       )}
