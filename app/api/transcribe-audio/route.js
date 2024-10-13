@@ -24,6 +24,8 @@ export async function POST(req) {
     const audioFile = formData.get('audio');
     const language = formData.get('language');
 
+    console.log('Received audio file:', audioFile.name, audioFile.type);
+
     if (!audioFile) {
       return NextResponse.json({ error: 'No audio file provided' }, { status: 400 });
     }
@@ -43,6 +45,10 @@ export async function POST(req) {
       model: 'whisper-1',
       language: languageCode,
     });
+
+    if (!response || !response.text) {
+      throw new Error('Invalid response from OpenAI API');
+    }
 
     return NextResponse.json({ text: response.text });
   } catch (error) {

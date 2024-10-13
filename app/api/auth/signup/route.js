@@ -1,22 +1,27 @@
 import { NextResponse } from 'next/server';
+import { connectToDatabase } from '../../../lib/mongodb';
+import { generateToken } from '../../../lib/auth';
 import bcrypt from 'bcryptjs';
-import { createUser, findUserByEmail } from '../../../models/User';
 
 export async function POST(req) {
   try {
-    const { name, email, password } = await req.json();
-
-    const existingUser = await findUserByEmail(email);
+    const { email, password } = await req.json();
+    const { db } = await connectToDatabase();
+    
+    const existingUser = await db.collection('users').findOne({ email });
     if (existingUser) {
-      return NextResponse.json({ error: 'Email already exists' }, { status: 400 });
+      return NextResponse.json({ error: 'Email already in use' }, { status: 400 });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await createUser({ name, email, password: hashedPassword });
+    const result = await db.collection('users').insertOne({ email, password: hashedPassword });
+    
+    const user = { id: result.insertedId.toString(), email };
+    const token = await generateToken(user.id);
 
-    return NextResponse.json({ message: 'User created successfully', userId: user._id });
+    return NextResponse.json({ token, user });
   } catch (error) {
     console.error('Signup error:', error);
-    return NextResponse.json({ error: 'An error occurred during signup' }, { status: 500 });
+    return NextResponse.json({ error: 'Signup failed' }, { status: 500 });
   }
 }

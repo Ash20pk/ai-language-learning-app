@@ -1,27 +1,34 @@
 import { NextResponse } from 'next/server';
+import { connectToDatabase } from '../../../lib/mongodb';
+import { generateToken } from '../../../lib/auth';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { findUserByEmail } from '../../../models/User';
 
 export async function POST(req) {
   try {
     const { email, password } = await req.json();
+    const { db } = await connectToDatabase();
+    const user = await db.collection('users').findOne({ email });
 
-    const user = await findUserByEmail(email);
     if (!user) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 400 });
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
+
     if (!isPasswordValid) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = await generateToken(user._id.toString());
 
-    return NextResponse.json({ token, user: { id: user._id, name: user.name, email: user.email } });
+    console.log('Login successful. Sending response:', { token, user: { id: user._id.toString(), email: user.email, name: user.name } });
+
+    return NextResponse.json({ 
+      token, 
+      user: { id: user._id.toString(), email: user.email } 
+    });
   } catch (error) {
     console.error('Login error:', error);
-    return NextResponse.json({ error: 'An error occurred during login' }, { status: 500 });
+    return NextResponse.json({ error: 'Login failed' }, { status: 500 });
   }
 }

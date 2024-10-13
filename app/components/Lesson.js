@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNavigateToNextLesson }) {
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const [content, setContent] = useState(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [feedback, setFeedback] = useState(null);
@@ -21,6 +21,8 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const [isTranscribing, setIsTranscribing] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [unlockedExercises, setUnlockedExercises] = useState([0]); // Start with the first exercise unlocked
 
   console.log("lesson component", language);
   useEffect(() => {
@@ -181,6 +183,11 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       console.log('Answer is correct');
       feedbackMessage = "Excellent! That's correct.";
       setFeedback(feedbackMessage);
+      setCorrectAnswers(prev => prev + 1);
+      // Unlock the next exercise if it exists
+      if (currentExerciseIndex + 1 < content.exercises.length) {
+        setUnlockedExercises(prev => [...prev, currentExerciseIndex + 1]);
+      }
     } else {
       console.log('Answer is incorrect');
       feedbackMessage = `Not quite. The correct phrase is: "${correctAnswer}". Let's try again.`;
@@ -210,6 +217,34 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       });
   }, []);
 
+  const transcribeAudio = async (audioBlob) => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'audio.webm');
+    formData.append('language', language);
+
+    try {
+      const response = await fetch('/api/transcribe-audio', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to transcribe audio');
+      }
+
+      const data = await response.json();
+      if (!data.text) {
+        throw new Error('No transcription text received');
+      }
+      return data.text;
+    } catch (error) {
+      console.error('Transcription error:', error);
+      setFeedback('Sorry, there was an error processing your speech. Please try again.');
+      return null;
+    }
+  };
+
   const stopRecording = useCallback(async () => {
     console.log('Stopping recording');
     setIsListening(false);
@@ -221,7 +256,9 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         try {
           const transcription = await transcribeAudio(audioBlob);
-          checkAnswer(transcription);
+          if (transcription) {
+            checkAnswer(transcription);
+          }
         } catch (error) {
           console.error('Transcription error:', error);
           setFeedback('Sorry, there was an error processing your speech. Please try again.');
@@ -231,24 +268,6 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       };
     }
   }, [checkAnswer]);
-
-  const transcribeAudio = async (audioBlob) => {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'audio.webm');
-    formData.append('language', language);
-
-    const response = await fetch('/api/transcribe-audio', {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to transcribe audio');
-    }
-
-    const data = await response.json();
-    return data.text;
-  };
 
   // Simple string similarity function (Levenshtein distance)
   const stringSimilarity = (a, b) => {
@@ -346,17 +365,53 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     setIsListening(false);
   }, []);
 
+  const saveProgress = async (exerciseIndex, completed = false) => {
+    try {
+      const token = await getToken();
+      const response = await fetch('/api/save-progress', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          languageCode,
+          lessonId: lesson.id,
+          exerciseIndex,
+          completed,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save progress');
+      }
+    } catch (error) {
+      console.error('Error saving progress:', error);
+    }
+  };
+
   const nextExercise = async () => {
     console.log('Moving to next exercise');
     if (currentExerciseIndex < content.exercises.length - 1) {
-      setCurrentExerciseIndex(currentExerciseIndex + 1);
-      setFeedback(null);
-      const nextMessage = "Great! Let's move on to the next phrase.";
-      playGuidedAudio(nextMessage);
+      const nextIndex = currentExerciseIndex + 1;
+      if (unlockedExercises.includes(nextIndex)) {
+        setCurrentExerciseIndex(nextIndex);
+        setFeedback(null);
+        await saveProgress(nextIndex);
+        const nextMessage = "Great! Let's move on to the next phrase.";
+        playGuidedAudio(nextMessage);
+      } else {
+        setFeedback("Please complete the current exercise correctly before moving to the next one.");
+      }
     } else {
       console.log('Lesson completed');
+      const allExercisesCorrect = correctAnswers === content.exercises.length;
+      await saveProgress(currentExerciseIndex, allExercisesCorrect);
       onComplete();
-      const completionMessage = "Congratulations! You've completed this lesson.";
+      const completionMessage = allExercisesCorrect 
+        ? "Congratulations! You've completed this lesson perfectly." 
+        : "You've finished the lesson, but some answers were incorrect. You may want to review this lesson later.";
       playGuidedAudio(completionMessage);
     }
   };
@@ -448,18 +503,18 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
       <h2 className="text-3xl font-bold mb-6 text-center text-blue-600">{lesson.title}</h2>
       <ProgressBar />
-      {currentExerciseIndex === 0 && content.introduction && (
+      {currentExerciseIndex === 0 && content && content.introduction && (
         <p className="mb-6 text-gray-700">{content.introduction}</p>
       )}
-      {currentExercise && (
+      {content && content.exercises && content.exercises[currentExerciseIndex] && (
         <div className="bg-gray-100 p-6 rounded-lg mb-6">
-          <ExercisePrompt prompt={currentExercise.prompt} />
+          <ExercisePrompt prompt={content.exercises[currentExerciseIndex].prompt} />
           <div className="space-y-4">
-            <p className="text-lg font-medium text-gray-800">{currentExercise.phrase}</p>
-            <p className="text-gray-600 italic">{currentExercise.translation}</p>
+            <p className="text-lg font-medium text-gray-800">{content.exercises[currentExerciseIndex].phrase}</p>
+            <p className="text-gray-600 italic">{content.exercises[currentExerciseIndex].translation}</p>
             <div className="flex space-x-4">
               <Button
-                onClick={() => speakPhrase(currentExercise.phrase)}
+                onClick={() => speakPhrase(content.exercises[currentExerciseIndex].phrase)}
                 className="bg-blue-500 hover:bg-blue-600"
               >
                 Listen
@@ -480,7 +535,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
           <p className="font-medium">{feedback}</p>
         </div>
       )}
-      {feedback && (
+      {feedback && feedback.startsWith('Excellent') && (
         <div className="flex justify-center space-x-4">
           {currentExerciseIndex < content.exercises.length - 1 ? (
             <Button onClick={nextExercise} className="bg-blue-500 hover:bg-blue-600">

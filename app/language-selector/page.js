@@ -14,11 +14,20 @@ const languages = [
 
 export default function LanguageSelector() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
+
+  React.useEffect(() => {
+    const checkAuth = async () => {
+      const token = await getToken();
+      if (!token) {
+        router.push('/auth');
+      }
+    };
+    checkAuth();
+  }, [router, getToken]);
 
   if (!user) {
-    router.push('/auth');
-    return null;
+    return null; // or a loading spinner
   }
 
   const handleLanguageSelect = (language) => {

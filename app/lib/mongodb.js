@@ -24,4 +24,11 @@ if (process.env.NODE_ENV === 'development') {
   clientPromise = client.connect();
 }
 
+export async function connectToDatabase() {
+  const client = await clientPromise;
+  const dbName = process.env.MONGODB_DB || 'languageLearningApp';
+  const db = client.db(dbName);
+  return { db, client };
+}
+
 export default clientPromise;
