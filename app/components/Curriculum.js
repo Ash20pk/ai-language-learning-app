@@ -88,7 +88,7 @@ function Curriculum({ languageCode, language }) {
     );
   }
 
-  if (!curriculum || curriculum.length === 0) {
+  if (!curriculum || !curriculum.lessons || curriculum.lessons.length === 0) {
     return (
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md shadow-md">
         <p className="font-bold">No Curriculum Data</p>
@@ -101,9 +101,9 @@ function Curriculum({ languageCode, language }) {
     <div className="Curriculum p-8 bg-gray-100 min-h-screen">
       <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">{language} Curriculum</h2>
       <ul className="space-y-6">
-        {curriculum.map((lesson, index) => {
+        {curriculum.lessons.map((lesson, index) => {
           const progress = userProgress[lesson.id] || { completed: false, exerciseIndex: 0 };
-          const isUnlocked = index === 0 || userProgress[curriculum[index - 1].id]?.completed;
+          const isUnlocked = index === 0 || userProgress[curriculum.lessons[index - 1].id]?.completed;
           
           return (
             <li key={lesson.id} className="bg-white shadow-lg rounded-lg p-6 transition-all duration-300 ease-in-out transform hover:scale-105">

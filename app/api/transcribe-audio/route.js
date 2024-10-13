@@ -1,8 +1,5 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
 
@@ -27,35 +24,25 @@ export async function POST(req) {
     const audioFile = formData.get('audio');
     const language = formData.get('language');
 
-    console.log('Received audio file:', audioFile.name, audioFile.type);
-
     if (!audioFile) {
       return NextResponse.json({ error: 'No audio file provided' }, { status: 400 });
     }
 
-    // Create a temporary file
-    const tempDir = os.tmpdir();
-    const tempFilePath = path.join(tempDir, `audio-${Date.now()}.webm`);
-
-    // Write the audio data to the temporary file
+    // Convert the file to a Buffer
     const arrayBuffer = await audioFile.arrayBuffer();
-    fs.writeFileSync(tempFilePath, Buffer.from(arrayBuffer));
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Create a File object from the buffer
+    const file = new File([buffer], audioFile.name, { type: audioFile.type });
 
     // Convert full language name to ISO-639-1 code
     const languageCode = languageMap[language.toLowerCase()] || 'en'; // Default to English if not found
 
     const response = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(tempFilePath),
+      file: file,
       model: 'whisper-1',
       language: languageCode,
     });
-
-    // Delete the temporary file
-    fs.unlinkSync(tempFilePath);
-
-    if (!response || !response.text) {
-      throw new Error('Invalid response from OpenAI API');
-    }
 
     return NextResponse.json({ text: response.text });
   } catch (error) {

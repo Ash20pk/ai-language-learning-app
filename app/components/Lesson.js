@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNavigateToNextLesson }) {
   const { user, getToken } = useAuth();
   const [content, setContent] = useState(null);
+  const [userProgress, setUserProgress] = useState(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [feedback, setFeedback] = useState(null);
   const [isListening, setIsListening] = useState(false);
@@ -24,31 +25,53 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [unlockedExercises, setUnlockedExercises] = useState([0]); // Start with the first exercise unlocked
 
-  console.log("lesson component", language);
   useEffect(() => {
-    async function fetchLessonContent() {
-      console.log('Fetching lesson content for:', lesson.title);
+    async function fetchLessonContentAndProgress() {
+      if (!user) return;
+
       try {
         setIsLoading(true);
-        const response = await fetch('/api/generate-lesson', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ language, languageCode, lessonTitle: lesson.title }),
-        });
-        console.log('API response status:', response.status);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch lesson content: ${response.status} ${response.statusText}`);
+        const token = await getToken();
+
+        const [lessonResponse, progressResponse] = await Promise.all([
+          fetch('/api/generate-lesson', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ 
+              language, 
+              languageCode, 
+              lessonTitle: lesson.title,
+              lessonId: lesson.id
+            }),
+          }),
+          fetch(`/api/user-progress?userId=${user.id}&languageCode=${languageCode}&lessonId=${lesson.id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }),
+        ]);
+
+        if (!lessonResponse.ok || !progressResponse.ok) {
+          throw new Error('Failed to fetch data');
         }
-        const data = await response.json();
-        console.log('Received lesson content:', data);
-        if (!data || !data.exercises || !Array.isArray(data.exercises)) {
+
+        const [lessonData, progressData] = await Promise.all([
+          lessonResponse.json(),
+          progressResponse.json(),
+        ]);
+
+        console.log('Received lesson content:', lessonData);
+        if (!lessonData || !lessonData.content || !lessonData.content.exercises || !Array.isArray(lessonData.content.exercises)) {
           throw new Error('Invalid lesson content structure received');
         }
-        setContent(data);
-        console.log('Content set in state:', data);
-        await preGenerateAudio(data.exercises);
+
+        setContent(lessonData.content);
+        setUserProgress(progressData);
+        console.log('Content set in state:', lessonData.content);
+        await preGenerateAudio(lessonData.content.exercises);
         await playGuidedAudio(`Welcome to the lesson: ${lesson.title}. Let's begin with the first exercise.`);
       } catch (err) {
         console.error('Error fetching lesson content:', err);
@@ -58,14 +81,16 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       }
     }
 
-    fetchLessonContent();
-  }, [lesson, language, languageCode]);
+    if (user) {
+      fetchLessonContentAndProgress();
+    }
+  }, [lesson, language, languageCode, user, getToken]);
 
   const preGenerateAudio = async (exercises) => {
     console.log('Pre-generating audio');
     setIsGeneratingAudio(true);
     const newAudioCache = { ...audioCache };
-    for (const exercise of exercises) {
+    const audioGenerationPromises = exercises.map(async (exercise) => {
       if (exercise.type === 'listen_and_repeat' && !newAudioCache[exercise.phrase]) {
         try {
           const audioBlob = await generateAudio(exercise.phrase, language);
@@ -74,7 +99,9 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
           console.error('Error pre-generating audio:', error);
         }
       }
-    }
+    });
+
+    await Promise.all(audioGenerationPromises);
     setAudioCache(newAudioCache);
     setIsGeneratingAudio(false);
     console.log('Audio pre-generation complete');
@@ -118,17 +145,19 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     
     setIsPlayingGuidedAudio(true);
     try {
-      // Split the text into parts, keeping the quotation marks
       const parts = text.split(/(".*?")/);
       
       for (const part of parts) {
         if (part.startsWith('"') && part.endsWith('"')) {
-          // This part is in the target language (quoted phrase)
-          const targetText = part.slice(1, -1); // Remove quotes
-          const audioBlob = await generateAudio(targetText, targetLanguage);
-          await playAudioBlob(audioBlob);
+          const targetText = part.slice(1, -1);
+          if (audioCache[targetText]) {
+            guidedAudioRef.current.src = audioCache[targetText];
+            await guidedAudioRef.current.play();
+          } else {
+            const audioBlob = await generateAudio(targetText, targetLanguage);
+            await playAudioBlob(audioBlob);
+          }
         } else if (part.trim() !== '') {
-          // This part is in English
           const audioBlob = await generateAudio(part, 'en');
           await playAudioBlob(audioBlob);
         }
@@ -139,7 +168,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       setIsPlayingGuidedAudio(false);
       console.log('Guided audio playback ended');
     }
-  }, [isPlayingGuidedAudio, generateAudio, playAudioBlob]);
+  }, [isPlayingGuidedAudio, audioCache]);
 
   const speakPhrase = async (phrase) => {
     console.log('Speaking phrase:', phrase);
@@ -148,9 +177,9 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       await audioRef.current.play();
     } else {
       try {
-        const audioBlob = await generateAudio(phrase);
+        const audioBlob = await generateAudio(phrase, language);
         const audioUrl = URL.createObjectURL(audioBlob);
-        setAudioCache({ ...audioCache, [phrase]: audioUrl });
+        setAudioCache(prevCache => ({ ...prevCache, [phrase]: audioUrl }));
         audioRef.current.src = audioUrl;
         await audioRef.current.play();
       } catch (err) {
@@ -207,7 +236,9 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       .then(stream => {
         mediaRecorderRef.current = new MediaRecorder(stream);
         mediaRecorderRef.current.ondataavailable = (event) => {
-          audioChunksRef.current.push(event.data);
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
         };
         mediaRecorderRef.current.start();
       })
@@ -218,22 +249,31 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   }, []);
 
   const transcribeAudio = async (audioBlob) => {
+    console.log('Transcribing audio, blob size:', audioBlob.size);
+    
     const formData = new FormData();
     formData.append('audio', audioBlob, 'audio.webm');
     formData.append('language', language);
-
+  
+    console.log('Sending transcription request for language:', language);
+  
     try {
       const response = await fetch('/api/transcribe-audio', {
         method: 'POST',
         body: formData,
       });
-
+  
+      console.log('Received response from transcribe-audio API, status:', response.status);
+  
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('Transcription API error:', errorData);
         throw new Error(errorData.error || 'Failed to transcribe audio');
       }
-
+  
       const data = await response.json();
+      console.log('Transcription API response:', data);
+  
       if (!data.text) {
         throw new Error('No transcription text received');
       }
@@ -251,23 +291,30 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     setIsTranscribing(true);
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        try {
-          const transcription = await transcribeAudio(audioBlob);
-          if (transcription) {
-            checkAnswer(transcription);
+      return new Promise((resolve) => {
+        mediaRecorderRef.current.onstop = async () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          console.log('Recording stopped, blob size:', audioBlob.size);
+          try {
+            const transcription = await transcribeAudio(audioBlob);
+            if (transcription) {
+              await checkAnswer(transcription);
+            }
+          } catch (error) {
+            console.error('Transcription error:', error);
+            setFeedback('Sorry, there was an error processing your speech. Please try again.');
+          } finally {
+            setIsTranscribing(false);
+            resolve();
           }
-        } catch (error) {
-          console.error('Transcription error:', error);
-          setFeedback('Sorry, there was an error processing your speech. Please try again.');
-        } finally {
-          setIsTranscribing(false);
-        }
-      };
+        };
+        mediaRecorderRef.current.stop();
+      });
+    } else {
+      console.log('MediaRecorder is not active');
+      setIsTranscribing(false);
     }
-  }, [checkAnswer]);
+  }, [checkAnswer, transcribeAudio]);
 
   // Simple string similarity function (Levenshtein distance)
   const stringSimilarity = (a, b) => {

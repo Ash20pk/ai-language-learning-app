@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { verifyToken } from '../../lib/auth';
+import { connectToDatabase } from '../../lib/mongodb';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -15,8 +17,27 @@ function extractJSONFromResponse(content) {
 
 export async function POST(request) {
   try {
+    const token = request.headers.get('Authorization')?.split(' ')[1];
+    const userId = await verifyToken(token);
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { language } = await request.json();
 
+    const { db } = await connectToDatabase();
+
+    // Check if curriculum already exists for the user and language
+    const existingCurriculum = await db.collection('curricula').findOne({
+      userId,
+      language,
+    });
+
+    if (existingCurriculum) {
+      return NextResponse.json(existingCurriculum);
+    }
+
+    // If not found, generate new curriculum
     const response = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [
@@ -33,9 +54,7 @@ export async function POST(request) {
     });
 
     const content = response.choices[0].message.content;
-
     const extractedContent = extractJSONFromResponse(content);
-
     let curriculum;
 
     try {
@@ -49,7 +68,32 @@ export async function POST(request) {
       throw new Error('Curriculum is not an array');
     }
 
-    return NextResponse.json(curriculum);
+    // Save curriculum to the database
+    const savedCurriculum = await db.collection('curricula').insertOne({
+      userId,
+      language,
+      lessons: curriculum,
+      createdAt: new Date(),
+    });
+
+    // Save user progress
+    await db.collection('userProgress').updateOne(
+      { userId },
+      { 
+        $set: { 
+          [`${language}.currentLesson`]: 0,
+          [`${language}.completed`]: false
+        }
+      },
+      { upsert: true }
+    );
+
+    return NextResponse.json({
+      _id: savedCurriculum.insertedId,
+      userId,
+      language,
+      lessons: curriculum,
+    });
   } catch (error) {
     console.error('Error generating curriculum:', error);
     return NextResponse.json(
