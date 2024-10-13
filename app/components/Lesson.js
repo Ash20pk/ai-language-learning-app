@@ -454,9 +454,16 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
 
   const Button = ({ onClick, className, children, disabled }) => (
     <button
-      onClick={onClick}
+      onClick={(e) => {
+        e.preventDefault(); // Prevent default behavior
+        e.stopPropagation(); // Stop event propagation
+        if (!disabled) {
+          onClick(e);
+        }
+      }}
       className={`px-4 py-2 rounded-md font-semibold text-white transition-colors duration-200 ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       disabled={disabled}
+      type="button" // Explicitly set type to "button" to prevent form submission
     >
       {children}
     </button>
