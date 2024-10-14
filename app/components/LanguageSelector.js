@@ -1,25 +1,91 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  Box,
+  Container,
+  Heading,
+  Input,
+  Button,
+  SimpleGrid,
+  Text,
+  VStack,
+  useColorModeValue,
+  Spinner,
+} from '@chakra-ui/react';
+import { motion } from 'framer-motion';
 
-const predefinedLanguages = [
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'it', name: 'Italian' },
-  { code: 'pt', name: 'Portuguese' },
-];
+const MotionBox = motion(Box);
 
 function LanguageSelector() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [userLanguages, setUserLanguages] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const { user, getToken } = useAuth();
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('blue.500', 'blue.300');
 
-  const handleSearch = (e) => {
+  useEffect(() => {
+    async function fetchUserLanguages() {
+      if (!user) return;
+
+      try {
+        const token = await getToken();
+        const response = await fetch('/api/user-languages', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch user languages');
+        }
+
+        const data = await response.json();
+        // Remove duplicates and capitalize first letter
+        const uniqueLanguages = Array.from(new Set(data.languages.map(lang => lang.code)))
+          .map(code => {
+            const language = data.languages.find(lang => lang.code === code);
+            return {
+              ...language,
+              name: language.name.charAt(0).toUpperCase() + language.name.slice(1)
+            };
+          });
+        setUserLanguages(uniqueLanguages);
+      } catch (error) {
+        console.error('Error fetching user languages:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchUserLanguages();
+  }, [user, getToken]);
+
+  const handleSearch = async (e) => {
     e.preventDefault();
     if (searchTerm) {
       const languageCode = searchTerm.toLowerCase().slice(0, 2);
-      router.push(`/curriculum/${languageCode}?name=${encodeURIComponent(searchTerm)}`);
+      const languageName = searchTerm.trim();
+
+      try {
+        const token = await getToken();
+        await fetch('/api/user-languages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ languageCode, languageName })
+        });
+
+        router.push(`/curriculum/${languageCode}?name=${encodeURIComponent(languageName)}`);
+      } catch (error) {
+        console.error('Error adding user language:', error);
+      }
     }
   };
 
@@ -27,42 +93,81 @@ function LanguageSelector() {
     router.push(`/curriculum/${language.code}?name=${encodeURIComponent(language.name)}`);
   };
 
-  return (
-    <div className="max-w-2xl mx-auto p-8">
-      <h1 className="text-3xl font-bold mb-6 text-center text-blue-600">Search a language you want to learn</h1>
-      
-      <form onSubmit={handleSearch} className="mb-8">
-        <div className="flex items-center border-b border-blue-500 py-2">
-          <input
-            className="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none"
-            type="text"
-            placeholder="Search for a language"
-            aria-label="Language"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <button
-            className="flex-shrink-0 bg-blue-500 hover:bg-blue-700 border-blue-500 hover:border-blue-700 text-sm border-4 text-white py-1 px-2 rounded"
-            type="submit"
-          >
-            Search
-          </button>
-        </div>
-      </form>
+  if (isLoading) {
+    return (
+      <Container maxW="4xl" py={16}>
+        <VStack spacing={8} align="stretch">
+          <Heading as="h1" size="2xl" textAlign="center" color="blue.500">
+            Loading Your Language Journey
+          </Heading>
+          <Box textAlign="center">
+            <Spinner size="xl" color="blue.500" />
+          </Box>
+        </VStack>
+      </Container>
+    );
+  }
 
-      <div className="grid grid-cols-2 gap-4">
-        {predefinedLanguages.map((language) => (
-          <button
-            key={language.code}
-            onClick={() => handleLanguageSelect(language)}
-            className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow text-left"
-          >
-            <h2 className="text-xl font-semibold mb-2">{language.name}</h2>
-            <p className="text-gray-600">Start learning {language.name} now!</p>
-          </button>
-        ))}
-      </div>
-    </div>
+  return (
+    <Container maxW="4xl" py={16}>
+      <VStack spacing={8} align="stretch">
+        <Heading as="h1" size="2xl" textAlign="center" color="blue.500">
+          Discover Your Next Language Adventure
+        </Heading>
+        
+        <Box as="form" onSubmit={handleSearch}>
+          <VStack spacing={4}>
+            <Input
+              size="lg"
+              placeholder="Search for a language"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              borderColor={borderColor}
+              _hover={{ borderColor: 'blue.300' }}
+              _focus={{ borderColor: 'blue.500', boxShadow: 'outline' }}
+            />
+            <Button
+              colorScheme="blue"
+              size="lg"
+              type="submit"
+              width="full"
+            >
+              Explore
+            </Button>
+          </VStack>
+        </Box>
+
+        {userLanguages.length > 0 && (
+          <Box>
+            <Heading as="h2" size="xl" mb={4} color="blue.400">
+              Continue Learning
+            </Heading>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+              {userLanguages.map((language) => (
+                <MotionBox
+                  key={language.code}
+                  as="button"
+                  onClick={() => handleLanguageSelect(language)}
+                  bg={bgColor}
+                  p={6}
+                  borderRadius="lg"
+                  boxShadow="md"
+                  textAlign="left"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <VStack align="start" spacing={2}>
+                    <Text fontSize="xl" fontWeight="bold">{language.name}</Text>
+                    <Text color="gray.500">Continue your {language.name} journey!</Text>
+                  </VStack>
+                </MotionBox>
+              ))}
+            </SimpleGrid>
+          </Box>
+        )}
+      </VStack>
+    </Container>
   );
 }
 
