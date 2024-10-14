@@ -1,6 +1,7 @@
 import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from './contexts/AuthContext';
+import { ChakraProvider } from '@chakra-ui/react';
 import Navigation from './components/Navigation';
 
 const geistSans = localFont({
@@ -23,12 +24,14 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <ChakraProvider>
         <AuthProvider>
           <Navigation />
           <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
             {children}
           </main>
         </AuthProvider>
+        </ChakraProvider>
       </body>
     </html>
   );

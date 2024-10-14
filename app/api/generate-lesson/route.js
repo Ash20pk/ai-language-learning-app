@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { verifyToken } from '../../lib/auth';
 import { connectToDatabase } from '../../lib/mongodb';
+import fetch from 'node-fetch';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -19,7 +20,7 @@ export async function POST(req) {
 
     const { db } = await connectToDatabase();
 
-    // Check if lesson already exists for the specific language and curriculum
+    // Check if lesson already exists for the specific user, language, curriculum, and lesson ID
     const existingLesson = await db.collection('lessons').findOne({
       userId,
       curriculumId,
@@ -101,6 +102,12 @@ export async function POST(req) {
       content: lessonContent,
     });
   } catch (error) {
+    // Handle duplicate key error gracefully
+    if (error.code === 11000) {
+      console.error('Duplicate lesson detected:', error);
+      return NextResponse.json({ error: 'Lesson already exists' }, { status: 409 });
+    }
+
     console.error('Error generating lesson content:', error);
     return NextResponse.json(
       { 
@@ -114,8 +121,20 @@ export async function POST(req) {
 }
 
 async function generateAudio(text, language) {
-  // This is a placeholder function. Replace with actual audio generation logic.
-  // You might use a text-to-speech service here, like Google Cloud Text-to-Speech or Amazon Polly.
-  console.log(`Generating audio for: "${text}" in ${language}`);
-  return `https://example.com/audio/${encodeURIComponent(text)}.mp3`;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+  const response = await fetch(`${apiUrl}/api/generate-audio`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text, language }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to generate audio');
+  }
+
+  const audioBuffer = await response.arrayBuffer();
+  const base64Audio = Buffer.from(audioBuffer).toString('base64');
+  return `data:audio/mpeg;base64,${base64Audio}`;
 }

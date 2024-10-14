@@ -4,11 +4,11 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: '/:path*',
+        source: '/(.*)',
         headers: [
           {
             key: 'Permissions-Policy',
-            value: 'microphone=(), camera=()',
+            value: 'microphone=self',
           },
         ],
       },

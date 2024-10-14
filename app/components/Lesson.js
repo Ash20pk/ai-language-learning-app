@@ -1,7 +1,25 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  Box,
+  Heading,
+  Text,
+  Button,
+  Progress,
+  Alert,
+  AlertIcon,
+  Spinner,
+  VStack,
+  HStack,
+  Center,
+  Container,
+  Flex,
+  IconButton,
+  Tooltip,
+} from '@chakra-ui/react';
+import { FaPlay, FaMicrophone, FaMicrophoneSlash, FaArrowRight } from 'react-icons/fa';
 
 function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNavigateToNextLesson }) {
   const { user, getToken } = useAuth();
@@ -25,9 +43,13 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [unlockedExercises, setUnlockedExercises] = useState([0]); // Start with the first exercise unlocked
 
+  const memoizedLesson = useMemo(() => lesson, [lesson]);
+  const memoizedUser = useMemo(() => user, [user]);
+
   useEffect(() => {
+    console.log('useEffect triggered');
     async function fetchLessonContentAndProgress() {
-      if (!user) return;
+      if (!memoizedUser) return;
 
       try {
         setIsLoading(true);
@@ -43,11 +65,11 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
             body: JSON.stringify({ 
               language, 
               languageCode, 
-              lessonTitle: lesson.title,
-              lessonId: lesson.id
+              lessonTitle: memoizedLesson.title,
+              lessonId: memoizedLesson.id
             }),
           }),
-          fetch(`/api/user-progress?userId=${user.id}&languageCode=${languageCode}&lessonId=${lesson.id}`, {
+          fetch(`/api/user-progress?userId=${memoizedUser.id}&languageCode=${languageCode}&lessonId=${memoizedLesson.id}`, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -71,8 +93,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
         setContent(lessonData.content);
         setUserProgress(progressData);
         console.log('Content set in state:', lessonData.content);
-        await preGenerateAudio(lessonData.content.exercises);
-        await playGuidedAudio(`Welcome to the lesson: ${lesson.title}. Let's begin with the first exercise.`);
+        await prepareAudio(lessonData.content.exercises);
       } catch (err) {
         console.error('Error fetching lesson content:', err);
         setError(`Failed to generate lesson content: ${err.message}`);
@@ -81,30 +102,24 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       }
     }
 
-    if (user) {
+    if (memoizedUser) {
       fetchLessonContentAndProgress();
     }
-  }, [lesson, language, languageCode, user, getToken]);
+  }, [memoizedLesson, language, languageCode, memoizedUser, getToken]);
 
-  const preGenerateAudio = async (exercises) => {
-    console.log('Pre-generating audio');
+  const prepareAudio = async (exercises) => {
+    console.log('Preparing audio');
     setIsGeneratingAudio(true);
     const newAudioCache = { ...audioCache };
-    const audioGenerationPromises = exercises.map(async (exercise) => {
-      if (exercise.type === 'listen_and_repeat' && !newAudioCache[exercise.phrase]) {
-        try {
-          const audioBlob = await generateAudio(exercise.phrase, language);
-          newAudioCache[exercise.phrase] = URL.createObjectURL(audioBlob);
-        } catch (error) {
-          console.error('Error pre-generating audio:', error);
-        }
+    for (const exercise of exercises) {
+      if (exercise.type === 'listen_and_repeat' && exercise.audio) {
+        newAudioCache[exercise.phrase] = exercise.audio;
       }
-    });
-
-    await Promise.all(audioGenerationPromises);
+    }
     setAudioCache(newAudioCache);
     setIsGeneratingAudio(false);
-    console.log('Audio pre-generation complete');
+    console.log('Audio preparation complete');
+    await playGuidedAudio(`Welcome to the lesson: ${memoizedLesson.title}. Let's begin with the first exercise.`);
   };
 
   const generateAudio = async (text, lang = 'en') => {
@@ -172,21 +187,45 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
 
   const speakPhrase = async (phrase) => {
     console.log('Speaking phrase:', phrase);
-    if (audioCache[phrase]) {
-      audioRef.current.src = audioCache[phrase];
-      await audioRef.current.play();
-    } else {
-      try {
-        const audioBlob = await generateAudio(phrase, language);
-        const audioUrl = URL.createObjectURL(audioBlob);
-        setAudioCache(prevCache => ({ ...prevCache, [phrase]: audioUrl }));
-        audioRef.current.src = audioUrl;
-        await audioRef.current.play();
-      } catch (err) {
-        console.error('Error playing audio:', err);
+    try {
+      if (audioCache[phrase]) {
+        const audio = new Audio(audioCache[phrase]);
+        await audio.play();
+      } else {
+        console.error('Audio not found for phrase:', phrase);
+        await regenerateAndPlayAudio(phrase);
       }
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      setFeedback("There was an error playing the audio. Please try again.");
     }
     await playGuidedAudio("Now, please repeat the phrase.", language);
+  };
+
+  const regenerateAndPlayAudio = async (phrase) => {
+    try {
+      const audioBlob = await generateAudio(phrase, language);
+      const base64Audio = await blobToBase64(audioBlob);
+      const audio = new Audio(base64Audio);
+      await audio.play();
+      // Update the cache with the new audio
+      setAudioCache(prevCache => ({
+        ...prevCache,
+        [phrase]: base64Audio
+      }));
+    } catch (error) {
+      console.error('Error regenerating audio:', error);
+      setFeedback("There was an error generating the audio. Please try again.");
+    }
+  };
+
+  const blobToBase64 = (blob) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   };
 
   const checkAnswer = useCallback(async (transcribedText) => {
@@ -205,7 +244,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     const normalizedCorrectAnswer = correctAnswer.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
 
     const similarity = stringSimilarity(normalizedTranscribedText, normalizedCorrectAnswer);
-    const threshold = 0.85; // You can adjust this threshold as needed
+    const threshold = 0.95; // You can adjust this threshold as needed
 
     let feedbackMessage;
     if (similarity >= threshold) {
@@ -382,36 +421,6 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     }
   }, [content, initializeSpeechRecognition]);
 
-  const startListening = useCallback(() => {
-    console.log('Starting listening, content:', content);
-    if (!content || !content.exercises || content.exercises.length <= currentExerciseIndex) {
-      console.error('Lesson content not available', { content, currentExerciseIndex });
-      setFeedback('Sorry, the lesson is not ready yet. Please wait a moment and try again.');
-      return;
-    }
-
-    if (!isRecognitionInitialized.current) {
-      initializeSpeechRecognition();
-    }
-
-    if (recognition.current) {
-      setIsListening(true);
-      setFeedback(null);
-      recognition.current.start();
-    } else {
-      console.error('Speech recognition not initialized');
-      setFeedback('Sorry, speech recognition is not available. Please try again.');
-    }
-  }, [content, currentExerciseIndex, initializeSpeechRecognition]);
-
-  const stopListening = useCallback(() => {
-    console.log('Stopping listening');
-    if (recognition.current) {
-      recognition.current.stop();
-    }
-    setIsListening(false);
-  }, []);
-
   const saveProgress = async (exerciseIndex, completed = false) => {
     try {
       const token = await getToken();
@@ -422,9 +431,9 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          userId: user.id,
+          userId: memoizedUser.id,
           languageCode,
-          lessonId: lesson.id,
+          lessonId: memoizedLesson.id,
           exerciseIndex,
           completed,
         }),
@@ -469,66 +478,41 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
 
   // UI Components
   const LoadingSpinner = () => (
-    <div className="flex justify-center items-center h-64">
-      <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-    </div>
+    <Center h="100vh">
+      <Spinner size="xl" color="blue.500" thickness="4px" speed="0.65s" />
+    </Center>
   );
 
   const ErrorMessage = ({ message }) => (
-    <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-md">
-      <p className="font-bold">Error</p>
-      <p>{message}</p>
-      <p className="mt-2">Please try refreshing the page or selecting a different lesson.</p>
-    </div>
+    <Container maxW="xl" centerContent>
+      <Alert status="error" variant="subtle" flexDirection="column" alignItems="center" justifyContent="center" textAlign="center" height="200px" bg="red.50" rounded="xl">
+        <AlertIcon boxSize="40px" mr={0} />
+        <Text fontWeight="bold" fontSize="xl" mt={4}>Error</Text>
+        <Text mt={2}>{message}</Text>
+        <Text mt={2}>Please try refreshing the page or selecting a different lesson.</Text>
+      </Alert>
+    </Container>
   );
 
   const ProgressBar = () => {
     if (!content || !content.exercises) return null;
     const progress = (currentExerciseIndex / content.exercises.length) * 100;
     return (
-      <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
-        <div
-          className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-in-out"
-          style={{ width: `${progress}%` }}
-        ></div>
-      </div>
+      <Progress value={progress} colorScheme="blue" size="sm" rounded="full" />
     );
   };
 
   const ExercisePrompt = ({ prompt }) => (
-    <h3 className="text-xl font-semibold mb-4 text-gray-800">{prompt}</h3>
+    <Text fontSize="xl" fontWeight="medium" mb={4} color="gray.700">{prompt}</Text>
   );
 
-  const Button = ({ onClick, className, children, disabled }) => (
-    <button
-      onClick={(e) => {
-        e.preventDefault(); // Prevent default behavior
-        e.stopPropagation(); // Stop event propagation
-        if (!disabled) {
-          onClick(e);
-        }
-      }}
-      className={`px-4 py-2 rounded-md font-semibold text-white transition-colors duration-200 ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-      disabled={disabled}
-      type="button" // Explicitly set type to "button" to prevent form submission
-    >
-      {children}
-    </button>
-  );
-
-  console.log('Rendering Lesson component', { 
-    isLoading, 
-    isGeneratingAudio, 
-    error, 
-    contentAvailable: !!content, 
-    currentExerciseIndex 
-  });
-
-  if (!user) {
+  if (!memoizedUser) {
     return (
-      <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-        <h2 className="text-3xl font-bold mb-6 text-center text-blue-600">Please log in to access lessons</h2>
-      </div>
+      <Container maxW="xl" centerContent>
+        <Box p={8} mt={10} bg="white" rounded="xl" shadow="lg" textAlign="center">
+          <Heading as="h2" size="xl" mb={6} color="blue.600">Please log in to access lessons</Heading>
+        </Box>
+      </Container>
     );
   }
 
@@ -554,62 +538,77 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const currentExercise = content.exercises[currentExerciseIndex];
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-      <h2 className="text-3xl font-bold mb-6 text-center text-blue-600">{lesson.title}</h2>
-      <ProgressBar />
-      {currentExerciseIndex === 0 && content && content.introduction && (
-        <p className="mb-6 text-gray-700">{content.introduction}</p>
-      )}
-      {content && content.exercises && content.exercises[currentExerciseIndex] && (
-        <div className="bg-gray-100 p-6 rounded-lg mb-6">
-          <ExercisePrompt prompt={content.exercises[currentExerciseIndex].prompt} />
-          <div className="space-y-4">
-            <p className="text-lg font-medium text-gray-800">{content.exercises[currentExerciseIndex].phrase}</p>
-            <p className="text-gray-600 italic">{content.exercises[currentExerciseIndex].translation}</p>
-            <div className="flex space-x-4">
-              <Button
-                onClick={() => speakPhrase(content.exercises[currentExerciseIndex].phrase)}
-                className="bg-blue-500 hover:bg-blue-600"
-              >
-                Listen
-              </Button>
-              <Button
-                onClick={isListening ? stopRecording : startRecording}
-                className={isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}
-                disabled={isTranscribing}
-              >
-                {isListening ? 'Stop' : isTranscribing ? 'Checking...' : 'Speak'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-      {feedback && (
-        <div className={`p-4 rounded-lg mb-6 ${feedback.startsWith('Excellent') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-          <p className="font-medium">{feedback}</p>
-        </div>
-      )}
-      {feedback && feedback.startsWith('Excellent') && (
-        <div className="flex justify-center space-x-4">
-          {currentExerciseIndex < content.exercises.length - 1 ? (
-            <Button onClick={nextExercise} className="bg-blue-500 hover:bg-blue-600">
-              Next Phrase
+    <Container maxW="xl" py={8}>
+      <VStack spacing={6} align="stretch">
+        <Heading as="h2" size="xl" textAlign="center" color="blue.600">{memoizedLesson.title}</Heading>
+        <ProgressBar />
+        {currentExerciseIndex === 0 && content && content.introduction && (
+          <Text color="gray.600" fontSize="lg" textAlign="center">{content.introduction}</Text>
+        )}
+        {content && content.exercises && content.exercises[currentExerciseIndex] && (
+          <Box bg="gray.50" p={6} rounded="xl" shadow="md">
+            <ExercisePrompt prompt={content.exercises[currentExerciseIndex].prompt} />
+            <VStack spacing={4} align="stretch">
+              <Text fontSize="xl" fontWeight="bold" color="gray.800">{content.exercises[currentExerciseIndex].phrase}</Text>
+              <Text color="gray.600" fontStyle="italic">{content.exercises[currentExerciseIndex].translation}</Text>
+              <Flex justify="center" mt={4}>
+                <Tooltip label="Listen">
+                  <IconButton
+                    icon={<FaPlay />}
+                    onClick={() => speakPhrase(content.exercises[currentExerciseIndex].phrase)}
+                    colorScheme="blue"
+                    size="lg"
+                    isRound
+                    mr={4}
+                  />
+                </Tooltip>
+                <Tooltip label={isListening ? 'Stop' : 'Speak'}>
+                  <IconButton
+                    icon={isListening ? <FaMicrophoneSlash /> : <FaMicrophone />}
+                    onClick={isListening ? stopRecording : startRecording}
+                    colorScheme={isListening ? 'red' : 'green'}
+                    size="lg"
+                    isRound
+                    isDisabled={isTranscribing}
+                  />
+                </Tooltip>
+              </Flex>
+            </VStack>
+          </Box>
+        )}
+        {feedback && (
+          <Alert status={feedback.startsWith('Excellent') ? 'success' : 'error'} variant="subtle" rounded="md">
+            <AlertIcon />
+            <Text fontWeight="medium">{feedback}</Text>
+          </Alert>
+        )}
+        {feedback && feedback.startsWith('Excellent') && (
+          <Center>
+            <Button
+              rightIcon={<FaArrowRight />}
+              onClick={currentExerciseIndex < content.exercises.length - 1 ? nextExercise : onComplete}
+              colorScheme="blue"
+              size="lg"
+            >
+              {currentExerciseIndex < content.exercises.length - 1 ? 'Next Phrase' : 'Complete Lesson'}
             </Button>
-          ) : (
-            <>
-              <Button onClick={onComplete} className="bg-green-500 hover:bg-green-600">
-                Complete Lesson
-              </Button>
-              {nextLessonId && onNavigateToNextLesson && (
-                <Button onClick={handleNextLesson} className="bg-blue-500 hover:bg-blue-600">
-                  Next Lesson
-                </Button>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </div>
+          </Center>
+        )}
+        {feedback && feedback.startsWith('Excellent') && currentExerciseIndex === content.exercises.length - 1 && nextLessonId && onNavigateToNextLesson && (
+          <Center mt={4}>
+            <Button
+              rightIcon={<FaArrowRight />}
+              onClick={handleNextLesson}
+              colorScheme="green"
+              variant="outline"
+              size="lg"
+            >
+              Next Lesson
+            </Button>
+          </Center>
+        )}
+      </VStack>
+    </Container>
   );
 }
 

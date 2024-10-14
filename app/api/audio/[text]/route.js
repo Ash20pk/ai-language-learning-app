@@ -3,25 +3,24 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
 
-// Define a mapping of languages to appropriate voices
 const languageVoiceMap = {
-  'en': 'alloy', // English
-  'es': 'nova',  // Spanish
-  'fr': 'nova',  // French
-  'de': 'nova',  // German
-  'it': 'nova',  // Italian
-  'pt': 'nova',  // Portuguese
-  'ja': 'nova',  // Japanese
-  'ko': 'nova',  // Korean
-  'zh': 'nova',  // Chinese
-  // Add more languages and corresponding voices as needed
+  'en': 'alloy',
+  'es': 'nova',
+  'fr': 'nova',
+  'de': 'nova',
+  'it': 'nova',
+  'pt': 'nova',
+  'ja': 'nova',
+  'ko': 'nova',
+  'zh': 'nova',
 };
 
-export async function POST(req) {
-  try {
-    const { text, language } = await req.json();
+export async function GET(request, { params }) {
+  const text = decodeURIComponent(params.text);
+  const { searchParams } = new URL(request.url);
+  const language = searchParams.get('lang') || 'en';
 
-    // Select the appropriate voice based on the language
+  try {
     const voice = languageVoiceMap[language] || 'alloy';
 
     const response = await openai.audio.speech.create({
