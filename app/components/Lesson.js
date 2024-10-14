@@ -205,7 +205,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     const normalizedCorrectAnswer = correctAnswer.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
 
     const similarity = stringSimilarity(normalizedTranscribedText, normalizedCorrectAnswer);
-    const threshold = 0.99; // You can adjust this threshold as needed
+    const threshold = 0.85; // You can adjust this threshold as needed
 
     let feedbackMessage;
     if (similarity >= threshold) {

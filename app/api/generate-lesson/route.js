@@ -19,10 +19,12 @@ export async function POST(req) {
 
     const { db } = await connectToDatabase();
 
-    // Check if lesson already exists
+    // Check if lesson already exists for the specific language and curriculum
     const existingLesson = await db.collection('lessons').findOne({
+      userId,
       curriculumId,
-      lessonId
+      lessonId,
+      language
     });
 
     if (existingLesson) {

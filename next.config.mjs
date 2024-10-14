@@ -11,11 +11,11 @@ const nextConfig = {
             value: 'microphone=(), camera=()',
           },
         ],
-        images: {
-          domains: ['oaidalleapiprodscus.blob.core.windows.net'],
-        },
       },
     ];
+  },
+  images: {
+    domains: ['oaidalleapiprodscus.blob.core.windows.net'],
   },
 };
 

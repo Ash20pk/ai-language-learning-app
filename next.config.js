@@ -1,13 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb',
-    },
+  reactStrictMode: true,
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Permissions-Policy',
+            value: 'microphone=(), camera=()',
+          },
+        ],
+      },
+    ];
   },
   images: {
     domains: ['oaidalleapiprodscus.blob.core.windows.net'],
   },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
