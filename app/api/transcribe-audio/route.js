@@ -23,6 +23,7 @@ export async function POST(req) {
     const formData = await req.formData();
     const audioFile = formData.get('audio');
     const language = formData.get('language');
+    const correctPhrase = formData.get('correctPhrase'); // Add this line
 
     if (!audioFile) {
       return NextResponse.json({ error: 'No audio file provided' }, { status: 400 });
@@ -44,9 +45,32 @@ export async function POST(req) {
       language: languageCode,
     });
 
-    return NextResponse.json({ text: response.text });
+    const transcribedText = response.text;
+
+    // Use GPT-3.5 to check the answer
+    const checkResponse = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: "You are a language learning assistant. Your task is to compare the transcribed text with the correct phrase and determine if they match in pronouncation, again do check for phonetic equivalence not just meaning. Provide feedback on the answer in one line or less. If the phrases are not equivalent, respond in format: Not quite right. It should be [correct phrase with phonetic sound of the correct phrase like Hello (heh-loh) ]. Don't forget to replace anything under [] accordingly and don't repeat the instructions I am giving you. If the phrases are equivalent, respond in format: Excellent! Correct. Good job."
+        },
+        {
+          role: "user",
+          content: `Correct phrase: "${correctPhrase}"\nTranscribed text: "${transcribedText}"\nLanguage: ${language}\n\nAre these phrases equivalent in pronouncation? Provide feedback.`
+        }
+      ]
+    });
+
+    const feedback = checkResponse.choices[0].message.content;
+
+    return NextResponse.json({ 
+      transcribedText, 
+      feedback,
+      isCorrect: feedback.toLowerCase().includes("correct") || feedback.toLowerCase().includes("equivalent")
+    });
   } catch (error) {
-    console.error('Error transcribing audio:', error);
-    return NextResponse.json({ error: 'Error transcribing audio: ' + error.message }, { status: 500 });
+    console.error('Error processing audio:', error);
+    return NextResponse.json({ error: 'Error processing audio: ' + error.message }, { status: 500 });
   }
 }

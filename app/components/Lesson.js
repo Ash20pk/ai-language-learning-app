@@ -231,42 +231,54 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     });
   };
 
-  const checkAnswer = useCallback(async (transcribedText) => {
-    console.log('Checking answer. Transcribed text:', transcribedText);
-
-    if (!content || !Array.isArray(content.exercises) || currentExerciseIndex < 0 || currentExerciseIndex >= content.exercises.length) {
-      console.error('Invalid content or exercise index');
-      setFeedback('Sorry, there was an error checking your answer. Please try again.');
-      return;
-    }
-
-    const currentExercise = content.exercises[currentExerciseIndex];
-    const correctAnswer = currentExercise.phrase;
-
-    const normalizedTranscribedText = transcribedText.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
-    const normalizedCorrectAnswer = correctAnswer.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
-
-    const similarity = stringSimilarity(normalizedTranscribedText, normalizedCorrectAnswer);
-    const threshold = 0.95; // You can adjust this threshold as needed
-
-    let feedbackMessage;
-    if (similarity >= threshold) {
-      console.log('Answer is correct');
-      feedbackMessage = "Excellent! That's correct.";
-      setFeedback(feedbackMessage);
-      setCorrectAnswers(prev => prev + 1);
-      // Unlock the next exercise if it exists
-      if (currentExerciseIndex + 1 < content.exercises.length) {
-        setUnlockedExercises(prev => [...prev, currentExerciseIndex + 1]);
-      }
-    } else {
-      console.log('Answer is incorrect');
-      feedbackMessage = `Not quite. The correct phrase is: "${correctAnswer}". Let's try again.`;
-      setFeedback(feedbackMessage);
-    }
+  const transcribeAndCheckAudio = async (audioBlob) => {
+    console.log('Transcribing and checking audio, blob size:', audioBlob.size);
     
-    await playGuidedAudio(feedbackMessage, language);
-  }, [content, currentExerciseIndex, language, playGuidedAudio]);
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'audio.webm');
+    formData.append('language', language);
+    formData.append('correctPhrase', content.exercises[currentExerciseIndex].phrase);
+  
+    console.log('Sending transcription and check request for language:', language);
+  
+    try {
+      const response = await fetch('/api/transcribe-audio', {
+        method: 'POST',
+        body: formData,
+      });
+  
+      console.log('Received response from transcribe-audio API, status:', response.status);
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Transcription API error:', errorData);
+        throw new Error(errorData.error || 'Failed to transcribe and check audio');
+      }
+  
+      const data = await response.json();
+      console.log('Transcription and check API response:', data);
+  
+      if (!data.transcribedText || !data.feedback) {
+        throw new Error('Invalid response received');
+      }
+
+      setFeedback(data.feedback);
+      if (data.isCorrect) {
+        setCorrectAnswers(prev => prev + 1);
+        if (currentExerciseIndex + 1 < content.exercises.length) {
+          setUnlockedExercises(prev => [...prev, currentExerciseIndex + 1]);
+        }
+      }
+
+      await playGuidedAudio(data.feedback, language);
+
+      return data.transcribedText;
+    } catch (error) {
+      console.error('Transcription and check error:', error);
+      setFeedback('Sorry, there was an error processing your speech. Please try again.');
+      return null;
+    }
+  };
 
   const startRecording = useCallback(() => {
     console.log('Starting recording');
@@ -290,43 +302,6 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       });
   }, []);
 
-  const transcribeAudio = async (audioBlob) => {
-    console.log('Transcribing audio, blob size:', audioBlob.size);
-    
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'audio.webm');
-    formData.append('language', language);
-  
-    console.log('Sending transcription request for language:', language);
-  
-    try {
-      const response = await fetch('/api/transcribe-audio', {
-        method: 'POST',
-        body: formData,
-      });
-  
-      console.log('Received response from transcribe-audio API, status:', response.status);
-  
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Transcription API error:', errorData);
-        throw new Error(errorData.error || 'Failed to transcribe audio');
-      }
-  
-      const data = await response.json();
-      console.log('Transcription API response:', data);
-  
-      if (!data.text) {
-        throw new Error('No transcription text received');
-      }
-      return data.text;
-    } catch (error) {
-      console.error('Transcription error:', error);
-      setFeedback('Sorry, there was an error processing your speech. Please try again.');
-      return null;
-    }
-  };
-
   const stopRecording = useCallback(async () => {
     console.log('Stopping recording');
     setIsListening(false);
@@ -338,12 +313,9 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           console.log('Recording stopped, blob size:', audioBlob.size);
           try {
-            const transcription = await transcribeAudio(audioBlob);
-            if (transcription) {
-              await checkAnswer(transcription);
-            }
+            await transcribeAndCheckAudio(audioBlob);
           } catch (error) {
-            console.error('Transcription error:', error);
+            console.error('Transcription and check error:', error);
             setFeedback('Sorry, there was an error processing your speech. Please try again.');
           } finally {
             setIsTranscribing(false);
@@ -356,39 +328,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       console.log('MediaRecorder is not active');
       setIsTranscribing(false);
     }
-  }, [checkAnswer, transcribeAudio]);
-
-  // Simple string similarity function (Levenshtein distance)
-  const stringSimilarity = (a, b) => {
-    if (a.length === 0) return b.length;
-    if (b.length === 0) return a.length;
-
-    const matrix = [];
-
-    for (let i = 0; i <= b.length; i++) {
-      matrix[i] = [i];
-    }
-
-    for (let j = 0; j <= a.length; j++) {
-      matrix[0][j] = j;
-    }
-
-    for (let i = 1; i <= b.length; i++) {
-      for (let j = 1; j <= a.length; j++) {
-        if (b.charAt(i - 1) === a.charAt(j - 1)) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j - 1] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j] + 1
-          );
-        }
-      }
-    }
-
-    return 1 - (matrix[b.length][a.length] / Math.max(a.length, b.length));
-  };
+  }, [transcribeAndCheckAudio]);
 
   const initializeSpeechRecognition = useCallback(() => {
     if ('webkitSpeechRecognition' in window && !isRecognitionInitialized.current && content) {
@@ -400,7 +340,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       recognition.current.onresult = (event) => {
         const userSaid = event.results[0][0].transcript;
         console.log('Speech recognized:', userSaid);
-        checkAnswer(userSaid);
+        transcribeAndCheckAudio(userSaid);
       };
 
       recognition.current.onend = () => {
@@ -416,7 +356,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       isRecognitionInitialized.current = true;
       console.log('Speech recognition initialized');
     }
-  }, [language, checkAnswer, content]);
+  }, [language, transcribeAndCheckAudio, content]);
 
   useEffect(() => {
     if (content) {
@@ -509,6 +449,16 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     <Text fontSize="xl" fontWeight="medium" mb={4} color="gray.700">{prompt}</Text>
   );
 
+  // Add this new function to handle the speak button click
+  const handleSpeakClick = (e) => {
+    e.preventDefault(); // Prevent default form submission
+    if (isListening) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
   if (!memoizedUser) {
     return (
       <Container maxW="xl" centerContent>
@@ -538,8 +488,6 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     }
   };
 
-  const currentExercise = content.exercises[currentExerciseIndex];
-
   return (
     <Container maxW="xl" py={8}>
       <VStack spacing={6} align="stretch">
@@ -566,14 +514,15 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
                   />
                 </Tooltip>
                 <Tooltip label={isListening ? 'Stop' : 'Speak'}>
-                  <IconButton
-                    icon={isListening ? <FaMicrophoneSlash /> : <FaMicrophone />}
-                    onClick={isListening ? stopRecording : startRecording}
+                  <Button
+                    leftIcon={isListening ? <FaMicrophoneSlash /> : <FaMicrophone />}
+                    onClick={handleSpeakClick} 
                     colorScheme={isListening ? 'red' : 'green'}
                     size="lg"
-                    isRound
                     isDisabled={isTranscribing}
-                  />
+                  >
+                    {isListening ? 'Stop' : isTranscribing ? 'Checking Answer' : 'Speak'}
+                  </Button>
                 </Tooltip>
               </Flex>
             </VStack>
