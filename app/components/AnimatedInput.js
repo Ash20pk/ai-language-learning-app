@@ -1,6 +1,6 @@
 import React from 'react';
 import { Input } from '@chakra-ui/react';
-import useTypewriter from '../hooks/useTypeWriterEffect';
+import useTypewriter from '../hooks/useTypewriterEffect';
 
 const AnimatedInput = ({ size, value, onChange, borderColor, ...props }) => {
   const placeholders = [

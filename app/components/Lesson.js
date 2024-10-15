@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useSearchParams } from 'next/navigation'; // Add this import
 import {
   Box,
   Heading,
@@ -19,9 +20,9 @@ import {
   IconButton,
   Tooltip,
 } from '@chakra-ui/react';
-import { FaPlay, FaMicrophone, FaMicrophoneSlash, FaArrowRight } from 'react-icons/fa';
+import { FaPlay, FaMicrophone, FaMicrophoneSlash, FaArrowRight, FaArrowLeft } from 'react-icons/fa';
 
-function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNavigateToNextLesson }) {
+function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNavigateToNextLesson, onBackToCurriculum }) {
   const { user, getToken } = useAuth();
   const [content, setContent] = useState(null);
   const [userProgress, setUserProgress] = useState(null);
@@ -42,6 +43,8 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const audioChunksRef = useRef([]);
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [unlockedExercises, setUnlockedExercises] = useState([0]); // Start with the first exercise unlocked
+
+  const searchParams = useSearchParams(); // Add this line to get URL parameters
 
   const memoizedLesson = useMemo(() => lesson, [lesson]);
   const memoizedUser = useMemo(() => user, [user]);
@@ -64,6 +67,9 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       try {
         setIsLoading(true);
         const token = await getToken();
+
+        // Get the startIndex from URL parameters
+        const startIndex = parseInt(searchParams.get('startExercise') || '0', 10);
 
         const [lessonResponse, progressResponse] = await Promise.all([
           fetch('/api/generate-lesson', {
@@ -102,6 +108,8 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
 
         setContent(lessonData.content);
         setUserProgress(progressData);
+        // Set the current exercise index based on the startIndex from URL or progress data
+        setCurrentExerciseIndex(startIndex);
         console.log('Content set in state:', lessonData.content);
         await prepareAudio(lessonData.content.exercises);
       } catch (err) {
@@ -116,7 +124,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       hasFetchedRef.current = true;
       fetchLessonContentAndProgress();
     }
-  }, [memoizedLesson, language, languageCode, memoizedUser, getToken]);
+  }, [memoizedLesson, language, languageCode, memoizedUser, getToken, searchParams]);
 
   const prepareAudio = async (exercises) => {
     console.log('Preparing audio');
@@ -130,7 +138,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     setAudioCache(newAudioCache);
     setIsGeneratingAudio(false);
     console.log('Audio preparation complete');
-    await playGuidedAudio(`Welcome to the lesson: ${memoizedLesson.title}. Let's begin with the first exercise.`);
+    await playGuidedAudio(currentExerciseIndex === 0 ? `Welcome to the lesson: ${memoizedLesson.title}. Let's begin with the first exercise.` : `Welcome back to the lesson: ${memoizedLesson.title}. Let's continue with the next exercise.`);
   };
 
   const generateAudio = async (text, lang = 'en') => {
@@ -276,6 +284,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
         if (currentExerciseIndex + 1 < content.exercises.length) {
           setUnlockedExercises(prev => [...prev, currentExerciseIndex + 1]);
         }
+        await saveProgress(currentExerciseIndex, true);  // Save progress when exercise is correct
       }
 
       await playGuidedAudio(data.feedback, language);
@@ -382,7 +391,6 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          userId: memoizedUser.id,
           languageCode,
           lessonId: memoizedLesson.id,
           exerciseIndex,
@@ -393,8 +401,20 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       if (!response.ok) {
         throw new Error('Failed to save progress');
       }
+
+      const result = await response.json();
+      console.log('Progress saved:', result);
+
+      // Update local state to reflect the saved progress
+      setUserProgress(prevProgress => ({
+        ...prevProgress,
+        exerciseIndex,
+        completed: completed || prevProgress.completed
+      }));
+
     } catch (error) {
       console.error('Error saving progress:', error);
+      setFeedback("There was an error saving your progress. Your results may not be recorded.");
     }
   };
 
@@ -405,7 +425,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       if (unlockedExercises.includes(nextIndex)) {
         setCurrentExerciseIndex(nextIndex);
         setFeedback(null);
-        await saveProgress(nextIndex);
+        await saveProgress(nextIndex, false);  // Save progress for the new exercise
         const nextMessage = "Great! Let's move on to the next phrase.";
         playGuidedAudio(nextMessage);
       } else {
@@ -414,7 +434,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     } else {
       console.log('Lesson completed');
       const allExercisesCorrect = correctAnswers === content.exercises.length;
-      await saveProgress(currentExerciseIndex, allExercisesCorrect);
+      await saveProgress(currentExerciseIndex, allExercisesCorrect);  // Save final progress
       onComplete();
       const completionMessage = allExercisesCorrect 
         ? "Congratulations! You've completed this lesson perfectly." 
@@ -467,6 +487,14 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     }
   };
 
+  // Add this new function to handle the back button click
+  const handleBackToCurriculum = () => {
+    console.log('Navigating back to curriculum');
+    if (onBackToCurriculum) {
+      onBackToCurriculum();
+    }
+  };
+
   if (!memoizedUser) {
     return (
       <Container maxW="xl" centerContent>
@@ -499,6 +527,18 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   return (
     <Container maxW="xl" py={8}>
       <VStack spacing={6} align="stretch">
+        {/* Add the back button at the top */}
+        <Button
+          leftIcon={<FaArrowLeft />}
+          onClick={handleBackToCurriculum}
+          colorScheme="gray"
+          variant="outline"
+          alignSelf="flex-start"
+          mb={4}
+        >
+          Back to Curriculum
+        </Button>
+
         <Heading as="h2" size="xl" textAlign="center" color="blue.600">{memoizedLesson.title}</Heading>
         <ProgressBar />
         {currentExerciseIndex === 0 && content && content.introduction && (

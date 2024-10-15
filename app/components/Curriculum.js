@@ -30,6 +30,7 @@ function Curriculum({ languageCode, language }) {
   const router = useRouter();
   const { user, getToken } = useAuth();
   const [curriculum, setCurriculum] = useState(null);
+  const [totalExercises, setTotalExercises] = useState(5); // Assuming each lesson has 5 exercises
   const [userProgress, setUserProgress] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -70,6 +71,15 @@ function Curriculum({ languageCode, language }) {
           progressResponse.json(),
         ]);
 
+        console.log('Generated Curriculum:', generatedCurriculum);
+        console.log('User Progress:', progress);
+
+        // Add this debug log
+        console.log('Progress for lesson 1:', progress['1']);
+
+        const totalExercises = generatedCurriculum.lessons.length;
+        console.log('Total Exercises:', totalExercises);
+        setTotalExercises(totalExercises);
         setCurriculum(generatedCurriculum);
         setUserProgress(progress);
       } catch (err) {
@@ -85,9 +95,8 @@ function Curriculum({ languageCode, language }) {
     }
   }, [language, languageCode, user, getToken]);
 
-  const startLesson = (lesson) => {
-    router.push(`/lesson/${lesson.id}?language=${encodeURIComponent(language)}&languageCode=${languageCode}&title=${encodeURIComponent(lesson.title)}`);
-  };
+  const startLesson = (lesson, startIndex) => {
+    router.push(`/lesson/${lesson.id}?language=${encodeURIComponent(language)}&languageCode=${languageCode}&title=${encodeURIComponent(lesson.title)}&startExercise=${startIndex}`);  };
 
   if (!user) {
     return (
@@ -144,10 +153,16 @@ function Curriculum({ languageCode, language }) {
         </Heading>
         <VStack spacing={6} align="stretch">
           {curriculum.lessons.map((lesson, index) => {
-            const progress = userProgress[lesson.id] || { completed: false, exerciseIndex: 0 };
-            const isUnlocked = index === 0 || userProgress[curriculum.lessons[index - 1].id]?.completed;
-            const progressPercentage = progress.completed ? 100 : (progress.exerciseIndex / (lesson.totalExercises || 1)) * 100;
-            
+            const progress = userProgress[lesson.id] || { exerciseIndex: 0, completed: false };
+            const isUnlocked = index === 0 || (userProgress[curriculum.lessons[index - 1].id]?.exerciseIndex === totalExercises);
+            const progressPercentage = (progress.exerciseIndex / totalExercises) * 100;
+            const isCompleted = progress.exerciseIndex === totalExercises; // Check if all exercises are completed
+
+            const firstUncompletedLesson = curriculum.lessons.find((l) => 
+              userProgress[l.id]?.completed !== "$completed"
+            );
+
+            console.log(firstUncompletedLesson);
             return (
               <MotionBox
                 key={lesson.id}
@@ -161,11 +176,13 @@ function Curriculum({ languageCode, language }) {
                 transition={{ duration: 0.2 }}
               >
                 <VStack align="stretch" spacing={4}>
+                  {/* Lesson Title and Icon */}
                   <HStack justify="space-between">
                     <Heading as="h3" size="lg" color={textColor}>
                       {lesson.title}
                     </Heading>
-                    {progress.completed ? (
+                    {/* Show completion or locked icon */}
+                    {isCompleted ? (
                       <Icon as={FiCheckCircle} color="green.500" boxSize={6} />
                     ) : !isUnlocked ? (
                       <Icon as={FiLock} color="gray.400" boxSize={6} />
@@ -176,13 +193,16 @@ function Curriculum({ languageCode, language }) {
                   </Text>
                   <Progress value={progressPercentage} colorScheme="blue" size="sm" borderRadius="full" />
                   <Button
-                    onClick={() => startLesson(lesson)}
+                    onClick={() => startLesson(lesson, firstUncompletedLesson.id - 1)}
                     colorScheme={isUnlocked ? 'blue' : 'gray'}
                     isDisabled={!isUnlocked}
                     size="md"
                     width="full"
                   >
-                    {progress.completed ? 'Review' : isUnlocked ? 'Start' : 'Locked'}
+                    {isCompleted ? 'Review' : 
+                     isUnlocked ? 
+                       (progress.exerciseIndex > 0 ? 'Continue' : 'Start') : 
+                       'Locked'}
                   </Button>
                 </VStack>
               </MotionBox>
