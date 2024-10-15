@@ -1,29 +1,27 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import fs from 'fs';  // For reading the JSON file
+import path from 'path'; // To construct file paths
 
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
 
-// Map full language names to ISO-639-1 codes
-const languageMap = {
-  'english': 'en',
-  'spanish': 'es',
-  'french': 'fr',
-  'german': 'de',
-  'italian': 'it',
-  'portuguese': 'pt',
-  'russian': 'ru',
-  'japanese': 'ja',
-  'korean': 'ko',
-  'chinese': 'zh',
-  // Add more languages as needed
-};
+// Load the language-codes JSON file once when the module is loaded
+let languageCodes = [];
+
+try {
+  const filePath = path.join(process.cwd(), 'language_codes.json'); // Adjust the path if needed
+  const data = fs.readFileSync(filePath, 'utf8');
+  languageCodes = JSON.parse(data); // Parse JSON array
+} catch (err) {
+  console.error("Error reading language codes file:", err);
+}
 
 export async function POST(req) {
   try {
     const formData = await req.formData();
     const audioFile = formData.get('audio');
     const language = formData.get('language');
-    const correctPhrase = formData.get('correctPhrase'); // Add this line
+    const correctPhrase = formData.get('correctPhrase'); 
 
     if (!audioFile) {
       return NextResponse.json({ error: 'No audio file provided' }, { status: 400 });
@@ -36,8 +34,9 @@ export async function POST(req) {
     // Create a File object from the buffer
     const file = new File([buffer], audioFile.name, { type: audioFile.type });
 
-    // Convert full language name to ISO-639-1 code
-    const languageCode = languageMap[language.toLowerCase()] || 'en'; // Default to English if not found
+     // Convert full language name to ISO-639-1 code using the JSON data
+     const languageCode = languageCodes.find(
+      (entry) => entry.English.toLowerCase() === language.toLowerCase())?.alpha2 || 'en';  // Default to 'en' for English if not found
 
     const response = await openai.audio.transcriptions.create({
       file: file,
@@ -47,9 +46,9 @@ export async function POST(req) {
 
     const transcribedText = response.text;
 
-    // Use GPT-3.5 to check the answer
+    // Use GPT-4o to check the answer
     const checkResponse = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
