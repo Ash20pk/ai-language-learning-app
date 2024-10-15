@@ -3,6 +3,28 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import {
+  Box,
+  Container,
+  Heading,
+  Text,
+  Button,
+  VStack,
+  HStack,
+  Progress,
+  useColorModeValue,
+  Spinner,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
+  Icon,
+  Flex,
+} from '@chakra-ui/react';
+import { motion } from 'framer-motion';
+import { FiLock, FiCheckCircle } from 'react-icons/fi';
+
+const MotionBox = motion(Box);
 
 function Curriculum({ languageCode, language }) {
   const router = useRouter();
@@ -11,6 +33,11 @@ function Curriculum({ languageCode, language }) {
   const [userProgress, setUserProgress] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.100', 'gray.700');
+  const textColor = useColorModeValue('gray.700', 'white');
+  const secondaryTextColor = useColorModeValue('gray.600', 'gray.300');
 
   useEffect(() => {
     async function fetchCurriculumAndProgress() {
@@ -64,73 +91,106 @@ function Curriculum({ languageCode, language }) {
 
   if (!user) {
     return (
-      <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-        <h2 className="text-3xl font-bold mb-6 text-center text-blue-600">Please log in to view the curriculum</h2>
-      </div>
+      <Container maxW="2xl" centerContent py={16}>
+        <Alert status="warning" variant="subtle" flexDirection="column" alignItems="center" justifyContent="center" textAlign="center" height="200px">
+          <AlertIcon boxSize="40px" mr={0} />
+          <AlertTitle mt={4} mb={1} fontSize="lg">Authentication Required</AlertTitle>
+          <AlertDescription maxWidth="sm">Please log in to view the curriculum.</AlertDescription>
+        </Alert>
+      </Container>
     );
   }
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
+      <Container centerContent py={16}>
+        <Spinner size="xl" color="blue.500" thickness="4px" />
+      </Container>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-md">
-        <p className="font-bold">Error</p>
-        <p>{error}</p>
-        <p className="mt-2">Please try refreshing the page or selecting a different language.</p>
-      </div>
+      <Container maxW="2xl" centerContent py={16}>
+        <Alert status="error" variant="subtle" flexDirection="column" alignItems="center" justifyContent="center" textAlign="center" height="200px">
+          <AlertIcon boxSize="40px" mr={0} />
+          <AlertTitle mt={4} mb={1} fontSize="lg">Error</AlertTitle>
+          <AlertDescription maxWidth="sm">
+            {error}
+            <Text mt={2}>Please try refreshing the page or selecting a different language.</Text>
+          </AlertDescription>
+        </Alert>
+      </Container>
     );
   }
 
   if (!curriculum || !curriculum.lessons || curriculum.lessons.length === 0) {
     return (
-      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md shadow-md">
-        <p className="font-bold">No Curriculum Data</p>
-        <p>No curriculum data available. Please try again.</p>
-      </div>
+      <Container maxW="2xl" centerContent py={16}>
+        <Alert status="info" variant="subtle" flexDirection="column" alignItems="center" justifyContent="center" textAlign="center" height="200px">
+          <AlertIcon boxSize="40px" mr={0} />
+          <AlertTitle mt={4} mb={1} fontSize="lg">No Curriculum Data</AlertTitle>
+          <AlertDescription maxWidth="sm">No curriculum data available. Please try again.</AlertDescription>
+        </Alert>
+      </Container>
     );
   }
 
   return (
-    <div className="Curriculum p-8 bg-gray-100 min-h-screen">
-      <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">{language} Curriculum</h2>
-      <ul className="space-y-6">
-        {curriculum.lessons.map((lesson, index) => {
-          const progress = userProgress[lesson.id] || { completed: false, exerciseIndex: 0 };
-          const isUnlocked = index === 0 || userProgress[curriculum.lessons[index - 1].id]?.completed;
-          
-          return (
-            <li key={lesson.id} className="bg-white shadow-lg rounded-lg p-6 transition-all duration-300 ease-in-out transform hover:scale-105">
-              <h3 className="text-2xl font-semibold mb-2 text-gray-800">{lesson.title}</h3>
-              <p className="text-gray-600 mb-4">{lesson.description}</p>
-              <div className="flex justify-between items-center">
-                <button
-                  onClick={() => startLesson(lesson)}
-                  className={`font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 ease-in-out transform hover:scale-105 ${
-                    isUnlocked
-                      ? 'bg-blue-500 hover:bg-blue-700 text-white'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }`}
-                  disabled={!isUnlocked}
-                  aria-label={`Start lesson: ${lesson.title}`}
-                >
-                  {progress.completed ? 'Review Lesson' : isUnlocked ? 'Start Lesson' : 'Locked'}
-                </button>
-                {progress.completed && (
-                  <span className="text-green-500 font-semibold">Completed</span>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+    <Box bg={useColorModeValue('gray.50', 'gray.900')} minH="100vh" py={16}>
+      <Container maxW="3xl">
+        <Heading as="h1" size="2xl" textAlign="center" mb={12} color={textColor}>
+          {language} Curriculum
+        </Heading>
+        <VStack spacing={6} align="stretch">
+          {curriculum.lessons.map((lesson, index) => {
+            const progress = userProgress[lesson.id] || { completed: false, exerciseIndex: 0 };
+            const isUnlocked = index === 0 || userProgress[curriculum.lessons[index - 1].id]?.completed;
+            const progressPercentage = progress.completed ? 100 : (progress.exerciseIndex / (lesson.totalExercises || 1)) * 100;
+            
+            return (
+              <MotionBox
+                key={lesson.id}
+                bg={bgColor}
+                borderRadius="lg"
+                borderWidth="1px"
+                borderColor={borderColor}
+                p={6}
+                shadow="md"
+                whileHover={{ y: -2 }}
+                transition={{ duration: 0.2 }}
+              >
+                <VStack align="stretch" spacing={4}>
+                  <HStack justify="space-between">
+                    <Heading as="h3" size="lg" color={textColor}>
+                      {lesson.title}
+                    </Heading>
+                    {progress.completed ? (
+                      <Icon as={FiCheckCircle} color="green.500" boxSize={6} />
+                    ) : !isUnlocked ? (
+                      <Icon as={FiLock} color="gray.400" boxSize={6} />
+                    ) : null}
+                  </HStack>
+                  <Text color={secondaryTextColor} fontSize="md">
+                    {lesson.description}
+                  </Text>
+                  <Progress value={progressPercentage} colorScheme="blue" size="sm" borderRadius="full" />
+                  <Button
+                    onClick={() => startLesson(lesson)}
+                    colorScheme={isUnlocked ? 'blue' : 'gray'}
+                    isDisabled={!isUnlocked}
+                    size="md"
+                    width="full"
+                  >
+                    {progress.completed ? 'Review' : isUnlocked ? 'Start' : 'Locked'}
+                  </Button>
+                </VStack>
+              </MotionBox>
+            );
+          })}
+        </VStack>
+      </Container>
+    </Box>
   );
 }
 

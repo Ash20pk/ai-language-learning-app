@@ -1,5 +1,3 @@
-'use client';
-
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,7 +5,6 @@ import {
   Box,
   Container,
   Heading,
-  Input,
   Button,
   SimpleGrid,
   Text,
@@ -16,6 +13,7 @@ import {
   Spinner,
 } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
+import AnimatedInput from './AnimatedInput'; 
 
 const MotionBox = motion(Box);
 
@@ -26,7 +24,7 @@ function LanguageSelector() {
   const router = useRouter();
   const { user, getToken } = useAuth();
   const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('blue.500', 'blue.300');
+  const borderColor = useColorModeValue('black.500', 'black.300');
 
   useEffect(() => {
     async function fetchUserLanguages() {
@@ -45,10 +43,10 @@ function LanguageSelector() {
         }
 
         const data = await response.json();
-        // Remove duplicates and capitalize first letter
-        const uniqueLanguages = Array.from(new Set(data.languages.map(lang => lang.code)))
-          .map(code => {
-            const language = data.languages.find(lang => lang.code === code);
+        // Capitalize and remove duplicates
+        const uniqueLanguages = Array.from(new Set(data.languages.map(lang => lang.name)))
+          .map(name => {
+            const language = data.languages.find(lang => lang.name === name);
             return {
               ...language,
               name: language.name.charAt(0).toUpperCase() + language.name.slice(1)
@@ -97,11 +95,11 @@ function LanguageSelector() {
     return (
       <Container maxW="4xl" py={16}>
         <VStack spacing={8} align="stretch">
-          <Heading as="h1" size="2xl" textAlign="center" color="blue.500">
+          <Heading as="h1" size="2xl" textAlign="center" color="black.500">
             Loading Your Language Journey
           </Heading>
           <Box textAlign="center">
-            <Spinner size="xl" color="blue.500" />
+            <Spinner size="xl" color="black.500" />
           </Box>
         </VStack>
       </Container>
@@ -111,23 +109,23 @@ function LanguageSelector() {
   return (
     <Container maxW="4xl" py={16}>
       <VStack spacing={8} align="stretch">
-        <Heading as="h1" size="2xl" textAlign="center" color="blue.500">
+        <Heading as="h1" size="2xl" textAlign="center" color="black.500">
           Discover Your Next Language Adventure
         </Heading>
         
         <Box as="form" onSubmit={handleSearch}>
           <VStack spacing={4}>
-            <Input
-              size="lg"
-              placeholder="Search for a language"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              borderColor={borderColor}
-              _hover={{ borderColor: 'blue.300' }}
-              _focus={{ borderColor: 'blue.500', boxShadow: 'outline' }}
-            />
+          <AnimatedInput
+            size="lg"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            borderColor={borderColor}
+            _hover={{ borderColor: 'black.300' }}
+            _focus={{ borderColor: 'black.500', boxShadow: 'outline' }}
+          />
+
             <Button
-              colorScheme="blue"
+              colorScheme="black"
               size="lg"
               type="submit"
               width="full"
@@ -139,7 +137,7 @@ function LanguageSelector() {
 
         {userLanguages.length > 0 && (
           <Box>
-            <Heading as="h2" size="xl" mb={4} color="blue.400">
+            <Heading as="h2" size="xl" mb={4} color="black.400">
               Continue Learning
             </Heading>
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>

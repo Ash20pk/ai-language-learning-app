@@ -46,6 +46,8 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const memoizedLesson = useMemo(() => lesson, [lesson]);
   const memoizedUser = useMemo(() => user, [user]);
 
+  const hasFetchedRef = useRef(false);
+
   useEffect(() => {
     console.log('useEffect triggered');
     async function fetchLessonContentAndProgress() {
@@ -102,7 +104,8 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       }
     }
 
-    if (memoizedUser) {
+    if (memoizedUser && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       fetchLessonContentAndProgress();
     }
   }, [memoizedLesson, language, languageCode, memoizedUser, getToken]);
