@@ -35,8 +35,8 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const [isPlayingGuidedAudio, setIsPlayingGuidedAudio] = useState(false);
   const recognition = useRef(null);
   const isRecognitionInitialized = useRef(false);
-  const audioRef = useRef(new Audio());
-  const guidedAudioRef = useRef(new Audio());
+  const audioRef = useRef(null);
+  const guidedAudioRef = useRef(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -47,6 +47,14 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const memoizedUser = useMemo(() => user, [user]);
 
   const hasFetchedRef = useRef(false);
+
+  useEffect(() => {
+    // Initialize Audio objects only on the client side
+    if (typeof window !== 'undefined') {
+      audioRef.current = new Audio();
+      guidedAudioRef.current = new Audio();
+    }
+  }, []);
 
   useEffect(() => {
     console.log('useEffect triggered');
@@ -156,8 +164,8 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
 
   const playGuidedAudio = useCallback(async (text, targetLanguage) => {
     console.log('Playing guided audio:', text, 'in language:', targetLanguage);
-    if (isPlayingGuidedAudio) {
-      console.log('Guided audio is already playing. Skipping:', text);
+    if (isPlayingGuidedAudio || !guidedAudioRef.current) {
+      console.log('Guided audio is already playing or not initialized. Skipping:', text);
       return;
     }
     
@@ -191,9 +199,9 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const speakPhrase = async (phrase) => {
     console.log('Speaking phrase:', phrase);
     try {
-      if (audioCache[phrase]) {
-        const audio = new Audio(audioCache[phrase]);
-        await audio.play();
+      if (audioRef.current && audioCache[phrase]) {
+        audioRef.current.src = audioCache[phrase];
+        await audioRef.current.play();
       } else {
         console.error('Audio not found for phrase:', phrase);
         await regenerateAndPlayAudio(phrase);
