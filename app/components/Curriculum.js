@@ -95,7 +95,9 @@ function Curriculum({ languageCode, language }) {
     }
   }, [language, languageCode, user, getToken]);
 
-  const startLesson = (lesson, startIndex) => {
+  const startLesson = (lesson) => {
+    const progress = userProgress[1] || { exerciseIndex: 0, completed: false };
+    const startIndex = progress.exerciseIndex;
     router.push(`/lesson/${lesson.id}?language=${encodeURIComponent(language)}&languageCode=${languageCode}&title=${encodeURIComponent(lesson.title)}&startExercise=${startIndex}`);  };
 
   if (!user) {
@@ -158,11 +160,6 @@ function Curriculum({ languageCode, language }) {
             const progressPercentage = (progress.exerciseIndex / totalExercises) * 100;
             const isCompleted = progress.exerciseIndex === totalExercises; // Check if all exercises are completed
 
-            const firstUncompletedLesson = curriculum.lessons.find((l) => 
-              userProgress[l.id]?.completed !== "$completed"
-            );
-
-            console.log(firstUncompletedLesson);
             return (
               <MotionBox
                 key={lesson.id}
@@ -193,7 +190,7 @@ function Curriculum({ languageCode, language }) {
                   </Text>
                   <Progress value={progressPercentage} colorScheme="blue" size="sm" borderRadius="full" />
                   <Button
-                    onClick={() => startLesson(lesson, firstUncompletedLesson.id - 1)}
+                    onClick={() => startLesson(lesson)}
                     colorScheme={isUnlocked ? 'blue' : 'gray'}
                     isDisabled={!isUnlocked}
                     size="md"
