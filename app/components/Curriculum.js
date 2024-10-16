@@ -115,7 +115,7 @@ function Curriculum({ languageCode, language }) {
   if (loading) {
     return (
       <Container centerContent py={16}>
-        <Spinner size="xl" color="blue.500" thickness="4px" />
+        <Spinner size="xl" color="black" thickness="4px" />
       </Container>
     );
   }
@@ -191,7 +191,7 @@ function Curriculum({ languageCode, language }) {
                   <Progress value={progressPercentage} colorScheme="blue" size="sm" borderRadius="full" />
                   <Button
                     onClick={() => startLesson(lesson)}
-                    colorScheme={isUnlocked ? 'blue' : 'gray'}
+                    color={isUnlocked ? 'black' : 'gray'}
                     isDisabled={!isUnlocked}
                     size="md"
                     width="full"

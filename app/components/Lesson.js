@@ -24,7 +24,7 @@ import { FaPlay, FaMicrophone, FaMicrophoneSlash, FaArrowRight, FaArrowLeft } fr
 
 function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNavigateToNextLesson, onBackToCurriculum }) {
   const { user, getToken } = useAuth();
-  const router = useRouter(); // Add this line to use the router
+  const router = useRouter(); 
   const [content, setContent] = useState(null);
   const [userProgress, setUserProgress] = useState(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
@@ -451,7 +451,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   // UI Components
   const LoadingSpinner = () => (
     <Center h="100vh">
-      <Spinner size="xl" color="blue.500" thickness="4px" speed="0.65s" />
+      <Spinner size="xl" color="black" thickness="4px" speed="0.65s" />
     </Center>
   );
 
@@ -496,7 +496,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     return (
       <Container maxW="xl" centerContent>
         <Box p={8} mt={10} bg="white" rounded="xl" shadow="lg" textAlign="center">
-          <Heading as="h2" size="xl" mb={6} color="blue.600">Please log in to access lessons</Heading>
+          <Heading as="h2" size="xl" mb={6} color="black">Please log in to access lessons</Heading>
         </Box>
       </Container>
     );
@@ -535,7 +535,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
           Back to Curriculum
         </Button>
 
-        <Heading as="h2" size="xl" textAlign="center" color="blue.600">{memoizedLesson.title}</Heading>
+        <Heading as="h2" size="xl" textAlign="center" color="black">{memoizedLesson.title}</Heading>
         <ProgressBar />
         {currentExerciseIndex === 0 && content && content.introduction && (
           <Text color="gray.600" fontSize="lg" textAlign="center">{content.introduction}</Text>

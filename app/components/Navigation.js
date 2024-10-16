@@ -15,8 +15,8 @@ export default function Navigation() {
     return (
       <Link
         href={href}
-        className={`text-gray-700 hover:text-blue-600 font-medium ${
-          isActive ? 'text-blue-600 font-bold' : ''
+        className={`text-gray-700 hover:text-black font-medium ${
+          isActive ? 'text-black font-bold' : ''
         }`}
       >
         {children}
@@ -30,7 +30,7 @@ export default function Navigation() {
         <div className="flex justify-between h-20">
           <div className="flex items-center">
             <Link href="/" className="flex-shrink-0 flex items-center">
-              <span className="text-2xl font-extrabold text-black">Lang<span className="text-blue-600">Learn</span></span>
+              <span className="text-2xl font-extrabold text-black">Lang<span className="text-black">Learn</span></span>
             </Link>
           </div>
           <div className="flex items-center space-x-4">
@@ -39,10 +39,10 @@ export default function Navigation() {
                 <NavLink href="/">Home</NavLink>
                 <NavLink href="/language-selector">Languages</NavLink>
                 <span className="text-gray-700 font-medium">{user.name}</span>
-                <Logout className="text-gray-700 hover:text-blue-600 font-medium" />
+                <Logout className="text-gray-700 hover:text-black font-medium" />
               </>
             ) : (
-              <Link href="/auth" className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+              <Link href="/auth" className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-black hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black">
                 Log in / Sign up
               </Link>
             )}
