@@ -3,57 +3,125 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import {
+  Box,
+  Button,
+  FormControl,
+  FormLabel,
+  Input,
+  VStack,
+  Heading,
+  Text,
+  useToast,
+  InputGroup,
+  InputRightElement,
+  IconButton,
+  Link,
+} from '@chakra-ui/react';
+import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 
 export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { signup } = useAuth();
   const router = useRouter();
+  const toast = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+
+    if (password !== confirmPassword) {
+      toast({
+        title: 'Error',
+        description: 'Passwords do not match',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
 
     const result = await signup(email, password);
     if (result.success) {
+      toast({
+        title: 'Account created.',
+        description: "We've created your account for you.",
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
       router.push('/language-selector');
     } else {
-      setError(result.error);
+      toast({
+        title: 'Sign Up Failed',
+        description: result.error,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
     }
   };
 
   return (
-    <div className="max-w-md mx-auto mt-8">
-      <h2 className="text-2xl font-bold mb-4">Sign Up</h2>
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="email" className="block mb-1">Email</label>
-          <input
-            type="email"
-            id="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="w-full px-3 py-2 border rounded"
-          />
-        </div>
-        <div>
-          <label htmlFor="password" className="block mb-1">Password</label>
-          <input
-            type="password"
-            id="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="w-full px-3 py-2 border rounded"
-          />
-        </div>
-        <button type="submit" className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600">
-          Sign Up
-        </button>
-      </form>
-    </div>
+    <Box maxWidth="400px" margin="auto" mt={8}>
+      <VStack spacing={8} align="stretch">
+        <Heading as="h2" size="xl" textAlign="center">
+          Create an Account
+        </Heading>
+        <form onSubmit={handleSubmit}>
+          <VStack spacing={4}>
+            <FormControl id="email" isRequired>
+              <FormLabel>Email</FormLabel>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+              />
+            </FormControl>
+            <FormControl id="password" isRequired>
+              <FormLabel>Password</FormLabel>
+              <InputGroup>
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                />
+                <InputRightElement width="3rem">
+                  <IconButton
+                    h="1.75rem"
+                    size="sm"
+                    onClick={() => setShowPassword(!showPassword)}
+                    icon={showPassword ? <MdVisibilityOff /> : <MdVisibility />}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  />
+                </InputRightElement>
+              </InputGroup>
+            </FormControl>
+            <FormControl id="confirm-password" isRequired>
+              <FormLabel>Confirm Password</FormLabel>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm your password"
+              />
+            </FormControl>
+            <Button
+              type="submit"
+              color="black"
+              width="full"
+              mt={4}
+              loadingText="Signing up"
+            >
+              Sign Up
+            </Button>
+          </VStack>
+        </form>
+      </VStack>
+    </Box>
   );
 }

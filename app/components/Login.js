@@ -3,57 +3,96 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import {
+  Box,
+  Button,
+  FormControl,
+  FormLabel,
+  Input,
+  VStack,
+  Heading,
+  Text,
+  useToast,
+  InputGroup,
+  InputRightElement,
+  IconButton,
+} from '@chakra-ui/react';
+import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const toast = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
 
     const result = await login(email, password);
     if (result.success) {
       router.push('/language-selector');
     } else {
-      setError(result.error);
+      toast({
+        title: 'Login Failed',
+        description: result.error,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
     }
   };
 
   return (
-    <div className="max-w-md mx-auto mt-8">
-      <h2 className="text-2xl font-bold mb-4">Login</h2>
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="email" className="block mb-1">Email</label>
-          <input
-            type="email"
-            id="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="w-full px-3 py-2 border rounded"
-          />
-        </div>
-        <div>
-          <label htmlFor="password" className="block mb-1">Password</label>
-          <input
-            type="password"
-            id="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="w-full px-3 py-2 border rounded"
-          />
-        </div>
-        <button type="submit" className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600">
-          Login
-        </button>
-      </form>
-    </div>
+    <Box maxWidth="400px" margin="auto" mt={8}>
+      <VStack spacing={8} align="stretch">
+        <Heading as="h2" size="xl" textAlign="center">
+          Welcome Back
+        </Heading>
+        <form onSubmit={handleSubmit}>
+          <VStack spacing={4}>
+            <FormControl id="email" isRequired>
+              <FormLabel>Email</FormLabel>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+              />
+            </FormControl>
+            <FormControl id="password" isRequired>
+              <FormLabel>Password</FormLabel>
+              <InputGroup>
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                />
+                <InputRightElement width="4.5rem">
+                  <IconButton
+                    h="1.75rem"
+                    size="sm"
+                    onClick={() => setShowPassword(!showPassword)}
+                    icon={showPassword ? <MdVisibilityOff /> : <MdVisibility />}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  />
+                </InputRightElement>
+              </InputGroup>
+            </FormControl>
+            <Button
+              type="submit"
+              color="black"
+              width="full"
+              mt={4}
+              loadingText="Logging in"
+            >
+              Log In
+            </Button>
+          </VStack>
+        </form>
+      </VStack>
+    </Box>
   );
 }
