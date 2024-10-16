@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useSearchParams } from 'next/navigation'; // Add this import
+import { useSearchParams, useRouter } from 'next/navigation'; // Add useRouter
 import {
   Box,
   Heading,
@@ -24,6 +24,7 @@ import { FaPlay, FaMicrophone, FaMicrophoneSlash, FaArrowRight, FaArrowLeft } fr
 
 function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNavigateToNextLesson, onBackToCurriculum }) {
   const { user, getToken } = useAuth();
+  const router = useRouter(); // Add this line to use the router
   const [content, setContent] = useState(null);
   const [userProgress, setUserProgress] = useState(null);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
@@ -44,7 +45,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [unlockedExercises, setUnlockedExercises] = useState([0]); // Start with the first exercise unlocked
 
-  const searchParams = useSearchParams(); // Add this line to get URL parameters
+  const searchParams = useSearchParams();
 
   const memoizedLesson = useMemo(() => lesson, [lesson]);
   const memoizedUser = useMemo(() => user, [user]);
@@ -70,6 +71,8 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
 
         // Get the startIndex from URL parameters
         const startIndex = parseInt(searchParams.get('startExercise') || '0', 10);
+        console.log('Start index:', startIndex);
+        setCurrentExerciseIndex(startIndex);
 
         const [lessonResponse, progressResponse] = await Promise.all([
           fetch('/api/generate-lesson', {
@@ -108,8 +111,6 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
 
         setContent(lessonData.content);
         setUserProgress(progressData);
-        // Set the current exercise index based on the startIndex from URL or progress data
-        setCurrentExerciseIndex(startIndex);
         console.log('Content set in state:', lessonData.content);
         await prepareAudio(lessonData.content.exercises);
       } catch (err) {
@@ -477,7 +478,6 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     <Text fontSize="xl" fontWeight="medium" mb={4} color="gray.700">{prompt}</Text>
   );
 
-  // Add this new function to handle the speak button click
   const handleSpeakClick = (e) => {
     e.preventDefault(); // Prevent default form submission
     if (isListening) {
@@ -487,12 +487,9 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     }
   };
 
-  // Add this new function to handle the back button click
-  const handleBackToCurriculum = () => {
+  const handleBackToCurriculum = async () => {
     console.log('Navigating back to curriculum');
-    if (onBackToCurriculum) {
-      onBackToCurriculum();
-    }
+    await router.push(`/curriculum/${languageCode}?name=${encodeURIComponent(language)}`);
   };
 
   if (!memoizedUser) {
@@ -527,7 +524,6 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   return (
     <Container maxW="xl" py={8}>
       <VStack spacing={6} align="stretch">
-        {/* Add the back button at the top */}
         <Button
           leftIcon={<FaArrowLeft />}
           onClick={handleBackToCurriculum}
