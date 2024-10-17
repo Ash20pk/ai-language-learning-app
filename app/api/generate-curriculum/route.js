@@ -7,6 +7,11 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+/**
+ * @dev Extracts JSON content from a string that may contain markdown code blocks.
+ * @param {string} content - The string to extract JSON from.
+ * @returns {string} - The extracted JSON string.
+ */
 function extractJSONFromResponse(content) {
   const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
   if (jsonMatch && jsonMatch[1]) {
@@ -15,19 +20,29 @@ function extractJSONFromResponse(content) {
   return content;
 }
 
+/**
+ * @dev Handles POST requests to generate a language learning curriculum.
+ * @param {Request} request - The incoming request object.
+ * @returns {NextResponse} - The response object containing the curriculum data.
+ */
 export async function POST(request) {
   try {
+    // @dev Extract the token from the request headers
     const token = request.headers.get('Authorization')?.split(' ')[1];
+
+    // @dev Verify the token and get the user ID
     const userId = await verifyToken(token);
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // @dev Extract the language from the request body
     const { language } = await request.json();
 
+    // @dev Connect to the database
     const { db } = await connectToDatabase();
 
-    // Check if curriculum already exists for the user and language
+    // @dev Check if a curriculum already exists for the user and language
     const existingCurriculum = await db.collection('curricula').findOne({
       userId,
       language,
@@ -37,7 +52,7 @@ export async function POST(request) {
       return NextResponse.json(existingCurriculum);
     }
 
-    // If not found, generate new curriculum
+    // @dev If not found, generate a new curriculum using OpenAI
     const response = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [
@@ -68,7 +83,7 @@ export async function POST(request) {
       throw new Error('Curriculum is not an array');
     }
 
-    // Save curriculum to the database
+    // @dev Save the curriculum to the database
     const savedCurriculum = await db.collection('curricula').insertOne({
       userId,
       language,
@@ -76,7 +91,7 @@ export async function POST(request) {
       createdAt: new Date(),
     });
 
-    // Save user progress
+    // @dev Save user progress
     await db.collection('userProgress').updateOne(
       { userId },
       { 
@@ -95,6 +110,7 @@ export async function POST(request) {
       lessons: curriculum,
     });
   } catch (error) {
+    // @dev Log any errors that occur during the curriculum generation process and return a 500 error
     console.error('Error generating curriculum:', error);
     return NextResponse.json(
       { 

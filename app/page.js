@@ -17,6 +17,12 @@ import { CheckIcon } from 'lucide-react';
 import Link from 'next/link';
 import useTypewriter from './hooks/useTypewriterEffect'; 
 
+/**
+ * @dev Feature component that displays a feature with an icon, title, and text.
+ * @param {string} title - The title of the feature.
+ * @param {string} text - The description of the feature.
+ * @returns {JSX.Element} - The rendered Feature component.
+ */
 const Feature = ({ title, text }) => (
   <VStack spacing={3} align="center">
     <Icon as={CheckIcon} w={8} h={8} color="black" />
@@ -25,6 +31,12 @@ const Feature = ({ title, text }) => (
   </VStack>
 );
 
+/**
+ * @dev PriceWrapper component that wraps the pricing plan with additional styling.
+ * @param {object} children - The child components.
+ * @param {boolean} isRecommended - Whether the plan is recommended.
+ * @returns {JSX.Element} - The rendered PriceWrapper component.
+ */
 const PriceWrapper = ({ children, isRecommended = false }) => (
   <Box
     shadow={isRecommended ? "2xl" : "lg"}
@@ -62,6 +74,10 @@ const PriceWrapper = ({ children, isRecommended = false }) => (
   </Box>
 );
 
+/**
+ * @dev LandingPage component that displays the main landing page.
+ * @returns {JSX.Element} - The rendered LandingPage component.
+ */
 export default function LandingPage() {
   const { isOpen, onToggle } = useDisclosure();
   

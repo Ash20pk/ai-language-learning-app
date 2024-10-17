@@ -1,5 +1,13 @@
 import { useState, useEffect } from 'react';
 
+/**
+ * @dev Custom hook to create a typewriter effect.
+ * @param {Array} texts - Array of strings to be displayed.
+ * @param {number} typingSpeed - Speed of typing in milliseconds.
+ * @param {number} pauseDuration - Duration of pause after typing a string in milliseconds.
+ * @param {number} backspaceSpeed - Speed of backspacing in milliseconds.
+ * @returns {string} - The current text being displayed.
+ */
 const useTypewriter = (texts = [], typingSpeed = 150, pauseDuration = 2000, backspaceSpeed = 100) => {
   const [displayText, setDisplayText] = useState('');
   const [currentIndex, setCurrentIndex] = useState(0);

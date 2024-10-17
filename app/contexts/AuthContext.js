@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation';
 
 const AuthContext = createContext();
 
+/**
+ * @dev AuthProvider component that provides authentication context.
+ * @param {object} children - The child components.
+ * @returns {JSX.Element} - The rendered AuthProvider component.
+ */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
@@ -100,6 +105,10 @@ export function AuthProvider({ children }) {
   );
 }
 
+/**
+ * @dev Custom hook to use the authentication context.
+ * @returns {object} - The authentication context.
+ */
 export function useAuth() {
   return useContext(AuthContext);
 }

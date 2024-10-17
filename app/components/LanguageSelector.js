@@ -21,6 +21,10 @@ import allowlist from '../../allowlist.json';
 
 const MotionBox = motion(Box);
 
+/**
+ * @dev LanguageSelector component for selecting a language to learn.
+ * Displays a list of available languages and allows users to search for a language.
+ */
 function LanguageSelector() {
   const [searchTerm, setSearchTerm] = useState('');
   const [userLanguages, setUserLanguages] = useState([]);
@@ -110,7 +114,8 @@ function LanguageSelector() {
 
   const handleInputChange = (e) => {
     const value = e.target.value;
-    setSearchTerm(value.charAt(0).toUpperCase() + value.slice(1));
+    // Capitalize only the first letter, even if user enters in all caps
+    setSearchTerm(value.charAt(0).toUpperCase() + value.slice(1).toLowerCase()); 
     setErrorMessage('');
   };
 

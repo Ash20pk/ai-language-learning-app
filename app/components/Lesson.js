@@ -22,6 +22,17 @@ import {
 } from '@chakra-ui/react';
 import { FaPlay, FaMicrophone, FaMicrophoneSlash, FaArrowRight, FaArrowLeft } from 'react-icons/fa';
 
+/**
+ * @dev Lesson component for displaying and interacting with a language lesson.
+ * @param {Object} props - The component props.
+ * @param {Object} props.lesson - The lesson data.
+ * @param {string} props.language - The language of the lesson.
+ * @param {string} props.languageCode - The language code.
+ * @param {Function} props.onComplete - Callback for when the lesson is completed.
+ * @param {string} [props.nextLessonId] - The ID of the next lesson.
+ * @param {Function} [props.onNavigateToNextLesson] - Callback for navigating to the next lesson.
+ * @param {Function} [props.onBackToCurriculum] - Callback for navigating back to the curriculum.
+ */
 function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNavigateToNextLesson, onBackToCurriculum }) {
   const { user, getToken } = useAuth();
   const router = useRouter(); 
@@ -446,7 +457,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
       onComplete();
       const completionMessage = allExercisesCorrect 
         ? "Congratulations! You've completed this lesson perfectly." 
-        : "You've finished the lesson, but some answers were incorrect. You may want to review this lesson later.";
+        : "You've finished the lesson. You may want to review this lesson later.";
       playGuidedAudio(completionMessage);
     }
   };
@@ -458,9 +469,29 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   // UI Components
   const LoadingSpinner = () => (
     <Center h="100vh">
-      <Spinner size="xl" color="black" thickness="4px" speed="0.65s" />
+      <VStack spacing={4}>
+        <Spinner size="xl" color="black" thickness="4px" speed="0.65s" />
+        {/* Add random fun text */}
+        <Text fontSize="xl" fontWeight="medium" color="gray.600">
+          {getRandomLoadingText()}
+        </Text>
+      </VStack>
     </Center>
   );
+
+  // Helper function to get a random loading text
+  const getRandomLoadingText = () => {
+    const loadingTexts = [
+      "Brewing up an exciting lesson...",
+      "Crafting an immersive language experience...",
+      "Preparing your language adventure...",
+      "Mixing the perfect blend of education and fun...",
+      "Assembling the building blocks of fluency...",
+      "Generating a dose of language inspiration...",
+    ];
+    
+    return loadingTexts[Math.floor(Math.random() * loadingTexts.length)];
+  };
 
   const ErrorMessage = ({ message }) => (
     <Container maxW="xl" centerContent>
@@ -571,6 +602,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
                     colorScheme={isListening ? 'red' : 'green'}
                     size="lg"
                     isDisabled={isTranscribing}
+                    isLoading={isTranscribing}
                   >
                     {isListening ? 'Stop' : isTranscribing ? 'Checking Answer' : 'Speak'}
                   </Button>

@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ChakraProvider } from '@chakra-ui/react';
 import Navigation from './components/Navigation';
 
+// Load local fonts
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
   variable: "--font-geist-sans",
@@ -15,22 +16,28 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
+// Metadata for the application
 export const metadata = {
   title: "Language Learning App",
   description: "An interactive language learning application",
 };
 
+/**
+ * @dev RootLayout component that wraps the entire application.
+ * @param {object} children - The child components.
+ * @returns {JSX.Element} - The rendered RootLayout component.
+ */
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-      <ChakraProvider>
-        <AuthProvider>
-          <Navigation />
-          <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-            {children}
-          </main>
-        </AuthProvider>
+        <ChakraProvider>
+          <AuthProvider>
+            <Navigation />
+            <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+              {children}
+            </main>
+          </AuthProvider>
         </ChakraProvider>
       </body>
     </html>

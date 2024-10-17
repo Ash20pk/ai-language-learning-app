@@ -24,6 +24,10 @@ if (process.env.NODE_ENV === 'development') {
   clientPromise = client.connect();
 }
 
+/**
+ * @dev Connects to the MongoDB database.
+ * @returns {Promise<{db: Db, client: MongoClient}>} - The database and client objects.
+ */
 export async function connectToDatabase() {
   const client = await clientPromise;
   const dbName = process.env.MONGODB_DB || 'languageLearningApp';

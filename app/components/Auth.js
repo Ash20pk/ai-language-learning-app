@@ -6,11 +6,16 @@ import { useAuth } from '../contexts/AuthContext';
 import SignUp from './SignUp';
 import Login from './Login';
 
+/**
+ * @dev Auth component that handles user authentication (sign up and login).
+ * @returns {JSX.Element} - The rendered Auth component.
+ */
 export default function Auth() {
   const [showSignUp, setShowSignUp] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
 
+  // @dev Redirect to the language selector if the user is already authenticated
   if (user) {
     router.push('/language-selector');
     return null;

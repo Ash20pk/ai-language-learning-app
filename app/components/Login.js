@@ -19,6 +19,10 @@ import {
 } from '@chakra-ui/react';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 
+/**
+ * @dev Login component that handles user login.
+ * @returns {JSX.Element} - The rendered Login component.
+ */
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

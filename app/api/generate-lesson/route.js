@@ -9,7 +9,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Load the language-codes JSON file
+// @dev Load the language-codes JSON file
 let languageCodes = [];
 try {
   const filePath = path.join(process.cwd(), 'language_codes.json');
@@ -20,26 +20,26 @@ try {
 }
 
 /**
- * Handles POST requests to generate and save a new lesson.
+ * @dev Handles POST requests to generate and save a new lesson.
  * @param {Request} req - The incoming request object.
  * @returns {NextResponse} - The response object.
  */
 export async function POST(req) {
   try {
-    // Extract the token from the Authorization header
+    // @dev Extract the token from the Authorization header
     const token = req.headers.get('Authorization')?.split(' ')[1];
     const userId = await verifyToken(token);
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Parse the request body to get lesson details
+    // @dev Parse the request body to get lesson details
     const { language, lessonTitle, curriculumId, lessonId } = await req.json();
 
-    // Connect to the database
+    // @dev Connect to the database
     const { db } = await connectToDatabase();
 
-    // Check if the lesson already exists for the specific user, language, curriculum, and lesson ID
+    // @dev Check if the lesson already exists for the specific user, language, curriculum, and lesson ID
     const existingLesson = await db.collection('lessons').findOne({
       userId,
       curriculumId,
@@ -51,7 +51,7 @@ export async function POST(req) {
       return NextResponse.json(existingLesson);
     }
 
-    // Generate new lesson content using OpenAI
+    // @dev Generate new lesson content using OpenAI
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
@@ -68,7 +68,7 @@ export async function POST(req) {
               {
                 "type": "listen_and_repeat",
                 "prompt": "Listen and repeat the following phrase",
-                "phrase": "Phrase in ${language}",
+                "phrase": "Phrase in ${language} along with it's pronunciation in english in brackets",
                 "translation": "English translation of the phrase"
               }
             ]
@@ -78,16 +78,16 @@ export async function POST(req) {
       ],
     });
 
-    // Extract and parse the lesson content from the OpenAI response
+    // @dev Extract and parse the lesson content from the OpenAI response
     const content = response.choices[0].message.content;
     const lessonContent = JSON.parse(content);
 
-    // Generate audio for each exercise
+    // @dev Generate audio for each exercise
     for (let exercise of lessonContent.exercises) {
       exercise.audio = await generateAudio(exercise.phrase, language);
     }
 
-    // Save the lesson to the database
+    // @dev Save the lesson to the database
     const savedLesson = await db.collection('lessons').insertOne({
       userId,
       curriculumId,
@@ -98,7 +98,7 @@ export async function POST(req) {
       createdAt: new Date(),
     });
 
-    // Update user progress
+    // @dev Update user progress
     await db.collection('userProgress').updateOne(
       { userId, [`${language}.curriculumId`]: curriculumId },
       { 
@@ -112,7 +112,7 @@ export async function POST(req) {
       { upsert: true }
     );
 
-    // Return the saved lesson details
+    // @dev Return the saved lesson details
     return NextResponse.json({
       _id: savedLesson.insertedId,
       userId,
@@ -123,13 +123,13 @@ export async function POST(req) {
       content: lessonContent,
     });
   } catch (error) {
-    // Handle duplicate key error gracefully
+    // @dev Handle duplicate key error gracefully
     if (error.code === 11000) {
       console.error('Duplicate lesson detected:', error);
       return NextResponse.json({ error: 'Lesson already exists' }, { status: 409 });
     }
 
-    // Log and return the error
+    // @dev Log and return the error
     console.error('Error generating lesson content:', error);
     return NextResponse.json(
       { 
@@ -143,11 +143,10 @@ export async function POST(req) {
 }
 
 /**
- * Generates audio for a given text and language.
+ * @dev Generates audio for a given text and language.
  * @param {string} text - The text to convert to audio.
  * @param {string} language - The language of the text.
  * @returns {Promise<string>} - The base64 encoded audio data.
- * @dev This function calls an external API to generate the audio. Ensure the API is up and running.
  */
 async function generateAudio(text, language) {
   try {

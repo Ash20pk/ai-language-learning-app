@@ -5,7 +5,7 @@ import path from 'path'; // To construct file paths
 
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
 
-// Load the language-codes JSON file asynchronously once when the module is loaded
+// @dev Load the language-codes JSON file asynchronously once when the module is loaded
 let languageCodes = [];
 
 try {
@@ -16,17 +16,23 @@ try {
   console.error("Error reading language codes file:", err);
 }
 
+/**
+ * @dev Handles POST requests to generate audio from text.
+ * @param {Request} req - The incoming request object.
+ * @returns {NextResponse} - The response object containing audio data.
+ */
 export async function POST(req) {
   try {
+    // @dev Extract text and language from the request body
     const { text, language } = await req.json();
 
-    // Log the input language for debugging
+    // @dev Log the input language for debugging
     console.log(`Generating audio for text in language: ${language}`);
 
-    // Select the appropriate voice based on the language
+    // @dev Select the appropriate voice based on the language
     const voice = 'alloy';  // You could enhance this logic to dynamically choose the voice based on language
 
-    // Convert full language name to ISO-639-1 code using the JSON data
+    // @dev Convert full language name to ISO-639-1 code using the JSON data
     const languageCode = languageCodes.find(
       (entry) => entry.English.toLowerCase() === language.toLowerCase()
     )?.alpha2 || 'en';  // Default to 'en' for English if not found
@@ -35,19 +41,19 @@ export async function POST(req) {
       console.warn(`Language "${language}" not found in language codes. Defaulting to "en".`);
     }
 
-    // Determine if the input is a single word or a phrase
+    // @dev Determine if the input is a single word or a phrase
     const words = text.trim().split(/\s+/);
     let slowedText;
 
     if (words.length === 1) {
-      // For a single word, add slight pauses between syllables
+      // @dev For a single word, add slight pauses between syllables
       slowedText = words[0].split('').join('.');
     } else {
-      // For phrases, add pauses between words
+      // @dev For phrases, add pauses between words
       slowedText = words.join(' . ');
     }
 
-    // Generate the audio using OpenAI TTS
+    // @dev Generate the audio using OpenAI TTS
     const response = await openai.audio.speech.create({
       model: "tts-1",
       voice: voice,
@@ -56,10 +62,10 @@ export async function POST(req) {
       response_format: "opus",
     });
 
-    // Convert the response to an audio buffer
+    // @dev Convert the response to an audio buffer
     const audioBuffer = Buffer.from(await response.arrayBuffer());
 
-    // Return the audio buffer with the correct MIME type for Opus audio
+    // @dev Return the audio buffer with the correct MIME type for Opus audio
     return new NextResponse(audioBuffer, {
       status: 200,
       headers: {
@@ -67,6 +73,7 @@ export async function POST(req) {
       },
     });
   } catch (error) {
+    // @dev Log any errors that occur during the audio generation process and return a 500 error
     console.error('Error generating audio:', error);
     return NextResponse.json({ error: 'Failed to generate audio' }, { status: 500 });
   }

@@ -20,6 +20,10 @@ import {
 } from '@chakra-ui/react';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 
+/**
+ * @dev SignUp component that handles user sign up.
+ * @returns {JSX.Element} - The rendered SignUp component.
+ */
 export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

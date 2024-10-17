@@ -4,6 +4,10 @@ import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 
+/**
+ * @dev Logout component that handles user logout.
+ * @returns {JSX.Element} - The rendered Logout component.
+ */
 export default function Logout() {
   const { logout } = useAuth();
   const router = useRouter();

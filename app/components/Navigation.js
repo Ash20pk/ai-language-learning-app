@@ -6,10 +6,19 @@ import { useAuth } from '../contexts/AuthContext';
 import Logout from './Logout';
 import { usePathname } from 'next/navigation';
 
+/**
+ * @dev Navigation component for the application.
+ * Displays navigation links and user authentication status.
+ */
 export default function Navigation() {
   const { user } = useAuth();
   const pathname = usePathname();
 
+  /**
+   * @dev Renders a navigation link with active state styling.
+   * @param {string} href - The URL path for the link.
+   * @param {ReactNode} children - The content of the link.
+   */
   const NavLink = ({ href, children }) => {
     const isActive = pathname === href;
     return (

@@ -25,6 +25,12 @@ import { FiLock, FiCheckCircle } from 'react-icons/fi';
 
 const MotionBox = motion(Box);
 
+/**
+ * @dev Curriculum component that displays the curriculum for a specific language.
+ * @param {string} languageCode - The language code.
+ * @param {string} language - The language name.
+ * @returns {JSX.Element} - The rendered Curriculum component.
+ */
 function Curriculum({ languageCode, language }) {
   const router = useRouter();
   const { user, getToken } = useAuth();
@@ -113,7 +119,13 @@ function Curriculum({ languageCode, language }) {
   if (loading) {
     return (
       <Container centerContent py={16}>
-        <Spinner size="xl" color="black" thickness="4px" />
+        <VStack spacing={4}>
+          <Spinner size="xl" color="black" thickness="4px" />
+          {/* Add random fun text */}
+          <Text fontSize="xl" fontWeight="medium" color="gray.600">
+            {getRandomLoadingText()}
+          </Text>
+        </VStack>
       </Container>
     );
   }
@@ -208,3 +220,17 @@ function Curriculum({ languageCode, language }) {
 }
 
 export default Curriculum;
+
+// Helper function to get a random loading text
+const getRandomLoadingText = () => {
+  const loadingTexts = [
+    "Crafting your personalized learning path...",
+    "Assembling the building blocks of fluency...",
+    "Preparing your language learning roadmap...",
+    "Generating a tailored curriculum just for you...",
+    "Mapping out your journey to language mastery...",
+    "Designing your language learning adventure...",
+  ];
+  
+  return loadingTexts[Math.floor(Math.random() * loadingTexts.length)];
+};
