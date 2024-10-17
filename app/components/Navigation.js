@@ -37,7 +37,7 @@ export default function Navigation() {
             {user ? (
               <>
                 <NavLink href="/">Home</NavLink>
-                <NavLink href="/language-selector">Select Languages</NavLink>
+                <NavLink href="/language-selector">Select Language</NavLink>
                 <span className="text-gray-700 font-medium">{user.name}</span>
                 <Logout className="text-gray-700 hover:text-black font-medium" />
               </>
