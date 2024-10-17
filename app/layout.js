@@ -1,20 +1,11 @@
-import localFont from "next/font/local";
+import '@fontsource/source-sans-pro/400.css';
+import '@fontsource/source-sans-pro/700.css';
 import "./globals.css";
 import { AuthProvider } from './contexts/AuthContext';
-import { ChakraProvider } from '@chakra-ui/react';
+import { ChakraProvider, Box } from '@chakra-ui/react';
 import Navigation from './components/Navigation';
-
-// Load local fonts
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-});
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
-});
+import Footer from './components/Footer';
+import theme from './theme';
 
 // Metadata for the application
 export const metadata = {
@@ -23,20 +14,22 @@ export const metadata = {
 };
 
 /**
- * @dev RootLayout component that wraps the entire application.
- * @param {object} children - The child components.
- * @returns {JSX.Element} - The rendered RootLayout component.
+ * RootLayout component that wraps the entire application.
+ * @param {object} props - The component props.
+ * @param {React.ReactNode} props.children - The child components.
+ * @returns {JSX.Element} The rendered RootLayout component.
  */
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ChakraProvider>
+      <body>
+        <ChakraProvider theme={theme}>
           <AuthProvider>
             <Navigation />
-            <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <Box as="main" display="flex" justifyContent="center" minHeight="80vh">
               {children}
-            </main>
+            </Box>
+            <Footer />
           </AuthProvider>
         </ChakraProvider>
       </body>

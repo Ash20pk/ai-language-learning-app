@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Flex } from '@chakra-ui/react';
 import Auth from '../components/Auth';
 
 /**
@@ -9,8 +10,8 @@ import Auth from '../components/Auth';
  */
 export default function AuthPage() {
   return (
-    <div className="max-w-md mx-auto mt-8">
+    <Flex justify="center" align="center" minHeight="70vh">
       <Auth />
-    </div>
+    </Flex>
   );
 }

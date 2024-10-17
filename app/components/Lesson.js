@@ -569,6 +569,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
           variant="outline"
           alignSelf="flex-start"
           mb={4}
+          size="sm"
         >
           Back to Curriculum
         </Button>

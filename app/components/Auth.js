@@ -22,7 +22,7 @@ export default function Auth() {
   }
 
   return (
-    <div className="max-w-md mx-auto mt-8">
+    <div className="max-w-50 mx-auto mt-8">
       {showSignUp ? (
         <>
           <SignUp />
