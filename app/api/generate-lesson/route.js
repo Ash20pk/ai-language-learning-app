@@ -2,25 +2,44 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { verifyToken } from '../../lib/auth';
 import { connectToDatabase } from '../../lib/mongodb';
-import fetch from 'node-fetch';
+import fs from 'fs';
+import path from 'path';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Load the language-codes JSON file
+let languageCodes = [];
+try {
+  const filePath = path.join(process.cwd(), 'language_codes.json');
+  const data = fs.readFileSync(filePath, 'utf8');
+  languageCodes = JSON.parse(data);
+} catch (err) {
+  console.error("Error reading language codes file:", err);
+}
+
+/**
+ * Handles POST requests to generate and save a new lesson.
+ * @param {Request} req - The incoming request object.
+ * @returns {NextResponse} - The response object.
+ */
 export async function POST(req) {
   try {
+    // Extract the token from the Authorization header
     const token = req.headers.get('Authorization')?.split(' ')[1];
     const userId = await verifyToken(token);
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Parse the request body to get lesson details
     const { language, lessonTitle, curriculumId, lessonId } = await req.json();
 
+    // Connect to the database
     const { db } = await connectToDatabase();
 
-    // Check if lesson already exists for the specific user, language, curriculum, and lesson ID
+    // Check if the lesson already exists for the specific user, language, curriculum, and lesson ID
     const existingLesson = await db.collection('lessons').findOne({
       userId,
       curriculumId,
@@ -32,7 +51,7 @@ export async function POST(req) {
       return NextResponse.json(existingLesson);
     }
 
-    // Generate new lesson content
+    // Generate new lesson content using OpenAI
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
@@ -59,6 +78,7 @@ export async function POST(req) {
       ],
     });
 
+    // Extract and parse the lesson content from the OpenAI response
     const content = response.choices[0].message.content;
     const lessonContent = JSON.parse(content);
 
@@ -67,7 +87,7 @@ export async function POST(req) {
       exercise.audio = await generateAudio(exercise.phrase, language);
     }
 
-    // Save lesson to the database
+    // Save the lesson to the database
     const savedLesson = await db.collection('lessons').insertOne({
       userId,
       curriculumId,
@@ -92,6 +112,7 @@ export async function POST(req) {
       { upsert: true }
     );
 
+    // Return the saved lesson details
     return NextResponse.json({
       _id: savedLesson.insertedId,
       userId,
@@ -108,6 +129,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Lesson already exists' }, { status: 409 });
     }
 
+    // Log and return the error
     console.error('Error generating lesson content:', error);
     return NextResponse.json(
       { 
@@ -120,21 +142,32 @@ export async function POST(req) {
   }
 }
 
+/**
+ * Generates audio for a given text and language.
+ * @param {string} text - The text to convert to audio.
+ * @param {string} language - The language of the text.
+ * @returns {Promise<string>} - The base64 encoded audio data.
+ * @dev This function calls an external API to generate the audio. Ensure the API is up and running.
+ */
 async function generateAudio(text, language) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-  const response = await fetch(`${apiUrl}/api/generate-audio`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ text, language }),
-  });
+  try {
+    const languageCode = languageCodes.find(
+      (entry) => entry.English.toLowerCase() === language.toLowerCase()
+    )?.alpha2 || 'en';
 
-  if (!response.ok) {
+    const response = await openai.audio.speech.create({
+      model: "tts-1",
+      voice: "alloy",
+      input: text,
+      response_format: "opus",
+      language: languageCode,
+    });
+
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    const base64Audio = audioBuffer.toString('base64');
+    return `data:audio/opus;base64,${base64Audio}`;
+  } catch (error) {
+    console.error('Error generating audio:', error);
     throw new Error('Failed to generate audio');
   }
-
-  const audioBuffer = await response.arrayBuffer();
-  const base64Audio = Buffer.from(audioBuffer).toString('base64');
-  return `data:audio/mpeg;base64,${base64Audio}`;
 }

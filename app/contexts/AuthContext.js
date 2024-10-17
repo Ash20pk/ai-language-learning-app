@@ -1,12 +1,14 @@
 'use client';
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
+  const router = useRouter();
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -16,6 +18,17 @@ export function AuthProvider({ children }) {
       setToken(storedToken);
     }
   }, []);
+
+  const isTokenExpired = (token) => {
+    if (!token) return true;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.exp * 1000 < Date.now();
+    } catch (error) {
+      console.error('Error parsing token:', error);
+      return true;
+    }
+  };
 
   const login = async (email, password) => {
     try {
@@ -69,9 +82,14 @@ export function AuthProvider({ children }) {
     setToken(null);
     localStorage.removeItem('user');
     localStorage.removeItem('token');
+    router.push('/auth');
   };
 
   const getToken = () => {
+    if (isTokenExpired(token)) {
+      logout();
+      return null;
+    }
     return token;
   };
 

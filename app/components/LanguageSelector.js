@@ -11,9 +11,13 @@ import {
   VStack,
   useColorModeValue,
   Spinner,
+  HStack,
+  Alert,
+  AlertIcon,
 } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
 import AnimatedInput from './AnimatedInput'; 
+import allowlist from '../../allowlist.json';
 
 const MotionBox = motion(Box);
 
@@ -21,10 +25,13 @@ function LanguageSelector() {
   const [searchTerm, setSearchTerm] = useState('');
   const [userLanguages, setUserLanguages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const router = useRouter();
   const { user, getToken } = useAuth();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('black.500', 'black.300');
+
+  const sortedAllowedLanguages = allowlist.allowed_languages.sort((a, b) => a.localeCompare(b));
 
   useEffect(() => {
     async function fetchUserLanguages() {
@@ -43,7 +50,7 @@ function LanguageSelector() {
         }
 
         const data = await response.json();
-        // Capitalize and remove duplicates
+        // Capitalize, remove duplicates, and sort alphabetically
         const uniqueLanguages = Array.from(new Set(data.languages.map(lang => lang.name)))
           .map(name => {
             const language = data.languages.find(lang => lang.name === name);
@@ -51,7 +58,8 @@ function LanguageSelector() {
               ...language,
               name: language.name.charAt(0).toUpperCase() + language.name.slice(1)
             };
-          });
+          })
+          .sort((a, b) => a.name.localeCompare(b.name));
         setUserLanguages(uniqueLanguages);
       } catch (error) {
         console.error('Error fetching user languages:', error);
@@ -66,11 +74,15 @@ function LanguageSelector() {
   const handleSearch = async (e) => {
     e.preventDefault();
     if (searchTerm) {
-      const languageCode = searchTerm.toLowerCase().slice(0, 2);
       const languageName = searchTerm.trim();
+      if (!sortedAllowedLanguages.includes(languageName)) {
+        setErrorMessage(`${languageName} is not available for learning at this time.`);
+        return;
+      }
 
       try {
         const token = await getToken();
+        const languageCode = languageName.toLowerCase().slice(0, 2);
         await fetch('/api/user-languages', {
           method: 'POST',
           headers: {
@@ -83,12 +95,23 @@ function LanguageSelector() {
         router.push(`/curriculum/${languageCode}?name=${encodeURIComponent(languageName)}`);
       } catch (error) {
         console.error('Error adding user language:', error);
+        setErrorMessage('An error occurred while adding the language. Please try again.');
       }
     }
   };
 
   const handleLanguageSelect = (language) => {
+    if (!sortedAllowedLanguages.includes(language.name)) {
+      setErrorMessage(`${language.name} is not available for learning at this time.`);
+      return;
+    }
     router.push(`/curriculum/${language.code}?name=${encodeURIComponent(language.name)}`);
+  };
+
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value.charAt(0).toUpperCase() + value.slice(1));
+    setErrorMessage('');
   };
 
   if (isLoading) {
@@ -115,25 +138,33 @@ function LanguageSelector() {
         
         <Box as="form" onSubmit={handleSearch}>
           <VStack spacing={4}>
-          <AnimatedInput
-            size="lg"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            borderColor={borderColor}
-            _hover={{ borderColor: 'black.300' }}
-            _focus={{ borderColor: 'black.500', boxShadow: 'outline' }}
-          />
-
-            <Button
-              colorScheme="black"
-              size="lg"
-              type="submit"
-              width="full"
-            >
-              Explore
-            </Button>
+            <HStack width="full">
+              <AnimatedInput
+                size="lg"
+                value={searchTerm}
+                onChange={handleInputChange}
+                borderColor={borderColor}
+                _hover={{ borderColor: 'black.300' }}
+                _focus={{ borderColor: 'black.500', boxShadow: 'outline' }}
+                flex={1}
+              />
+              <Button
+                color="black"
+                size="lg"
+                type="submit"
+              >
+                Search
+              </Button>
+            </HStack>
           </VStack>
         </Box>
+
+        {errorMessage && (
+          <Alert status="error">
+            <AlertIcon />
+            {errorMessage}
+          </Alert>
+        )}
 
         {userLanguages.length > 0 && (
           <Box>

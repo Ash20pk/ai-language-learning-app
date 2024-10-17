@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import {
@@ -19,7 +19,6 @@ import {
   AlertTitle,
   AlertDescription,
   Icon,
-  Flex,
 } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
 import { FiLock, FiCheckCircle } from 'react-icons/fi';
@@ -30,7 +29,7 @@ function Curriculum({ languageCode, language }) {
   const router = useRouter();
   const { user, getToken } = useAuth();
   const [curriculum, setCurriculum] = useState(null);
-  const [totalExercises, setTotalExercises] = useState(5); // Assuming each lesson has 5 exercises
+  const [totalExercises, setTotalExercises] = useState(5);
   const [userProgress, setUserProgress] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -40,65 +39,64 @@ function Curriculum({ languageCode, language }) {
   const textColor = useColorModeValue('gray.700', 'white');
   const secondaryTextColor = useColorModeValue('gray.600', 'gray.300');
 
-  useEffect(() => {
-    async function fetchCurriculumAndProgress() {
-      try {
-        setLoading(true);
-        const token = await getToken();
+  const fetchCurriculumAndProgress = useCallback(async () => {
+    if (!user) return;
 
-        const [curriculumResponse, progressResponse] = await Promise.all([
-          fetch('/api/generate-curriculum', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ language, languageCode }),
-          }),
-          fetch(`/api/user-progress?userId=${user.id}&languageCode=${languageCode}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }),
-        ]);
+    try {
+      setLoading(true);
+      const token = await getToken();
 
-        if (!curriculumResponse.ok || !progressResponse.ok) {
-          throw new Error('Failed to fetch data');
-        }
+      const [curriculumResponse, progressResponse] = await Promise.all([
+        fetch('/api/generate-curriculum', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ language, languageCode }),
+        }),
+        fetch(`/api/user-progress?userId=${user.id}&languageCode=${languageCode}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }),
+      ]);
 
-        const [generatedCurriculum, progress] = await Promise.all([
-          curriculumResponse.json(),
-          progressResponse.json(),
-        ]);
-
-        console.log('Generated Curriculum:', generatedCurriculum);
-        console.log('User Progress:', progress);
-
-        // Add this debug log
-        console.log('Progress for lesson 1:', progress['1']);
-
-        const totalExercises = generatedCurriculum.lessons.length;
-        console.log('Total Exercises:', totalExercises);
-        setTotalExercises(totalExercises);
-        setCurriculum(generatedCurriculum);
-        setUserProgress(progress);
-      } catch (err) {
-        setError(`Failed to fetch data: ${err.message}`);
-        console.error('Error:', err);
-      } finally {
-        setLoading(false);
+      if (!curriculumResponse.ok || !progressResponse.ok) {
+        throw new Error('Failed to fetch data');
       }
-    }
 
-    if (user) {
-      fetchCurriculumAndProgress();
-    }
-  }, [language, languageCode, user, getToken]);
+      const [generatedCurriculum, progress] = await Promise.all([
+        curriculumResponse.json(),
+        progressResponse.json(),
+      ]);
 
-  const startLesson = (lesson) => {
+      console.log('Generated Curriculum:', generatedCurriculum);
+      console.log('User Progress:', progress);
+      console.log('Progress for lesson 1:', progress['1']);
+
+      const totalExercises = generatedCurriculum.lessons.length;
+      console.log('Total Exercises:', totalExercises);
+      setTotalExercises(totalExercises);
+      setCurriculum(generatedCurriculum);
+      setUserProgress(progress);
+    } catch (err) {
+      setError(`Failed to fetch data: ${err.message}`);
+      console.error('Error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, getToken, language, languageCode]);
+
+  useEffect(() => {
+    fetchCurriculumAndProgress();
+  }, [fetchCurriculumAndProgress]);
+
+  const startLesson = useCallback((lesson) => {
     const progress = userProgress[1] || { exerciseIndex: 0, completed: false };
     const startIndex = progress.exerciseIndex;
-    router.push(`/lesson/${lesson.id}?language=${encodeURIComponent(language)}&languageCode=${languageCode}&title=${encodeURIComponent(lesson.title)}&startExercise=${startIndex}`);  };
+    router.push(`/lesson/${lesson.id}?language=${encodeURIComponent(language)}&languageCode=${languageCode}&title=${encodeURIComponent(lesson.title)}&startExercise=${startIndex}`);
+  }, [userProgress, language, languageCode, router]);
 
   if (!user) {
     return (
@@ -158,7 +156,7 @@ function Curriculum({ languageCode, language }) {
             const progress = userProgress[lesson.id] || { exerciseIndex: 0, completed: false };
             const isUnlocked = index === 0 || (userProgress[curriculum.lessons[index - 1].id]?.exerciseIndex === totalExercises);
             const progressPercentage = (progress.exerciseIndex / totalExercises) * 100;
-            const isCompleted = progress.exerciseIndex === totalExercises; // Check if all exercises are completed
+            const isCompleted = progress.exerciseIndex === totalExercises;
 
             return (
               <MotionBox
@@ -173,12 +171,10 @@ function Curriculum({ languageCode, language }) {
                 transition={{ duration: 0.2 }}
               >
                 <VStack align="stretch" spacing={4}>
-                  {/* Lesson Title and Icon */}
                   <HStack justify="space-between">
                     <Heading as="h3" size="lg" color={textColor}>
                       {lesson.title}
                     </Heading>
-                    {/* Show completion or locked icon */}
                     {isCompleted ? (
                       <Icon as={FiCheckCircle} color="green.500" boxSize={6} />
                     ) : !isUnlocked ? (

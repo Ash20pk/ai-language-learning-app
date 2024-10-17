@@ -205,11 +205,16 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     }
   }, [isPlayingGuidedAudio, audioCache]);
 
+  console.log('audioCache:', audioCache);
   const speakPhrase = async (phrase) => {
     console.log('Speaking phrase:', phrase);
     try {
       if (audioRef.current && audioCache[phrase]) {
-        audioRef.current.src = audioCache[phrase];
+        // Clean up the base64 string
+        const cleanBase64 = audioCache[phrase].replace(/^data:audio\/\w+;base64,/, '');
+        const audioBlob = await base64ToBlob(cleanBase64);
+        const audioUrl = URL.createObjectURL(audioBlob);
+        audioRef.current.src = audioUrl;
         await audioRef.current.play();
       } else {
         console.error('Audio not found for phrase:', phrase);
@@ -239,13 +244,15 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
     }
   };
 
-  const blobToBase64 = (blob) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+  // Function to decode base64 Opus and play the audio
+  const base64ToBlob = (base64, mimeType) => {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mimeType });
   };
 
   const transcribeAndCheckAudio = async (audioBlob) => {
