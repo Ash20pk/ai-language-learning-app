@@ -319,7 +319,6 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
   const startRecording = useCallback(() => {
     console.log('Starting recording');
     setIsListening(true);
-    setFeedback(null);
     audioChunksRef.current = [];
 
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -340,6 +339,7 @@ function Lesson({ lesson, language, languageCode, onComplete, nextLessonId, onNa
 
   const stopRecording = useCallback(async () => {
     console.log('Stopping recording');
+    setFeedback(null);
     setIsListening(false);
     setIsTranscribing(true);
 
