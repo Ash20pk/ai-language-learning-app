@@ -27,13 +27,14 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
   const toast = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    setIsLoading(true);
     const result = await login(email, password);
     if (result.success) {
       router.push('/language-selector');
@@ -46,6 +47,7 @@ export default function Login() {
         isClosable: true,
       });
     }
+    setIsLoading(false);
   };
 
   return (
@@ -91,6 +93,7 @@ export default function Login() {
               width="full"
               mt={4}
               loadingText="Logging in"
+              isLoading={isLoading}
             >
               Log In
             </Button>

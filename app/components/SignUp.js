@@ -29,13 +29,14 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { signup } = useAuth();
   const router = useRouter();
   const toast = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    setIsLoading(true);
     if (password !== confirmPassword) {
       toast({
         title: 'Error',
@@ -66,6 +67,7 @@ export default function SignUp() {
         isClosable: true,
       });
     }
+    setIsLoading(false);
   };
 
   return (
@@ -120,6 +122,7 @@ export default function SignUp() {
               width="full"
               mt={4}
               loadingText="Signing up"
+              isLoading={isLoading}
             >
               Sign Up
             </Button>

@@ -53,7 +53,7 @@ export async function POST(req) {
 
     // @dev Generate new lesson content using OpenAI
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",

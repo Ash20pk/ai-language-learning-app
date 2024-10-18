@@ -54,7 +54,7 @@ export async function POST(request) {
 
     // @dev If not found, generate a new curriculum using OpenAI
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
