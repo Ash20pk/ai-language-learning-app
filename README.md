@@ -1,5 +1,5 @@
 # LangLearn: GPT-Powered AI Language Learning Application
-LangLearn is a smart app that helps you learn new languages. It uses AI to create a learning plan just for you, based on the language you want to learn. The app listens to you speak and tells you how you're doing right away. It doesn't matter if you're just starting or already know some words - LangLearn adjusts to help you improve.
+LangLearn is an app that helps you learn new languages. It uses AI to create a learning plan just for you, based on the language you want to learn. Each learning plan has 5 lessons and each lesson has 5 listen and repeat exercises. The app listens to you speak and tells you how you're doing right away. It doesn't matter if you're just starting or already know some words - LangLearn adjusts to help you improve.
 
 ## Table of Contents
 - [LangLearn: GPT-Powered AI Language Learning Application](#langlearn-gpt-powered-ai-language-learning-application)
